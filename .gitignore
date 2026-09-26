@@ -1,0 +1,76 @@
+# Gradle / Android build outputs
+.gradle/
+**/build/
+.externalNativeBuild/
+.cxx/
+
+# Local Android SDK configuration
+local.properties
+
+# IDE metadata and user-specific settings
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# macOS / Windows / Linux metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Android Studio generated files
+captures/
+.navigation/
+
+# Signing keys and certificates — never commit these
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+
+# Signing and release configuration
+keystore.properties
+signing.properties
+release.properties
+
+# Service-account credentials and cloud configuration
+service-account*.json
+*service-account*.json
+firebase-debug.log
+google-services.json
+GoogleService-Info.plist
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+*.env
+*.secret
+*.secrets
+secrets.properties
+
+# API keys, tokens, and private certificates
+*credentials*.json
+*credentials*.properties
+*secrets*.json
+*secrets*.properties
+*token*.json
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Test and benchmark artifacts
+**/test-results/
+**/reports/
+*.hprof
+
+# Kotlin / Java generated output
+.kotlin/
