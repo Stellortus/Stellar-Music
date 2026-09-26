@@ -1,7 +1,7 @@
 package top.stellortus.stellarmusic.ui.screens
 
+import android.content.Context
 import android.media.MediaPlayer
-import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,12 +29,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.ByteReadChannel
+import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +44,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.withContext
 import top.stellortus.stellarmusic.R
 import top.stellortus.stellarmusic.data.Track
 import top.stellortus.stellarmusic.network.NetworkService
+import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import kotlin.time.Duration.Companion.milliseconds
 
 private sealed interface MusicListState {
     data object Loading : MusicListState
@@ -62,13 +66,17 @@ fun HomeScreen() {
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableFloatStateOf(0f) }
     var durationMs by remember { mutableFloatStateOf(0f) }
+    var playbackError by remember { mutableStateOf<String?>(null) }
+    val appContext = LocalContext.current
     val player = remember {
         StreamingAudioPlayer(
+            context = appContext,
             onPlayingChanged = { isPlaying = it },
             onProgressChanged = { position, duration ->
                 positionMs = position.toFloat()
                 durationMs = duration.toFloat()
             },
+            onError = { playbackError = it },
             onCompleted = {
                 isPlaying = false
                 positionMs = 0f
@@ -100,9 +108,11 @@ fun HomeScreen() {
                         playingId = track.id
                         positionMs = 0f
                         durationMs = 0f
+                        playbackError = null
                         player.play(track.id)
                     }
                 )
+                playbackError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp)) }
                 if (playingId != 0 && currentTrack != null) {
                     PlayerCard(
                         title = currentTrack.title,
@@ -199,7 +209,7 @@ private fun PlayerCard(
                 IconButton(onClick = onPlayPause) {
                     // 暂时使用左右箭头作为播放/暂停图标，后续可替换资源。
                     Icon(
-                        painter = painterResource(if (isPlaying) R.drawable.ic_left else R.drawable.ic_right),
+                        painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                         contentDescription = if (isPlaying) "暂停" else "播放"
                     )
                 }
@@ -225,48 +235,69 @@ private fun ErrorContent(message: String) {
 }
 
 private class StreamingAudioPlayer(
+    private val context: Context,
     private val onPlayingChanged: (Boolean) -> Unit,
     private val onProgressChanged: (Int, Int) -> Unit,
+    private val onError: (String) -> Unit,
     private val onCompleted: () -> Unit
 ) {
     private var mediaPlayer: MediaPlayer? = null
-    private var readPipe: ParcelFileDescriptor? = null
-    private var writeJob: Job? = null
+    private var audioFile: File? = null
+    private var downloadJob: Job? = null
     private var progressJob: Job? = null
     private var playToken = 0
+    private var isPrepared = false
     private val scope = CoroutineScope(Dispatchers.Main.immediate)
 
     fun play(id: Int) {
         val token = ++playToken
         stopCurrent()
         onPlayingChanged(false)
-        writeJob = scope.launch(Dispatchers.IO) {
-            val pipe = ParcelFileDescriptor.createPipe()
-            readPipe = pipe[0]
+        downloadJob = scope.launch(Dispatchers.IO) {
+            val file = File.createTempFile("stellar-track-", ".mp3", context.cacheDir)
             try {
                 val response = NetworkService.get(id)
-                val output = FileOutputStream(pipe[1].fileDescriptor)
-                val channel: ByteReadChannel = response.bodyAsChannel()
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                while (isActive) {
-                    val count = channel.readAvailable(buffer)
-                    if (count == -1) break
-                    if (count > 0) output.write(buffer, 0, count)
+                if (!response.status.isSuccess()) {
+                    throw IOException("服务器返回 HTTP ${response.status.value}")
                 }
-                output.close()
-            } catch (_: Throwable) {
-                runCatching { pipe[1].close() }
+                val channel = response.bodyAsChannel()
+                FileOutputStream(file).use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (isActive) {
+                        val count = channel.readAvailable(buffer)
+                        if (count == -1) break
+                        if (count > 0) output.write(buffer, 0, count)
+                    }
+                }
+                if (!isActive || token != playToken) {
+                    file.delete()
+                    return@launch
+                }
+                if (file.length() == 0L) throw IOException("服务器返回了空音频")
+                withContext(Dispatchers.Main.immediate) { prepareFile(file, token) }
+            } catch (error: Throwable) {
+                file.delete()
+                if (token == playToken) {
+                    onPlayingChanged(false)
+                    onError("音频下载失败：${error.message ?: "未知错误"}")
+                }
             }
         }
-        scope.launch {
-            // The pipe is assigned before prepareAsync, so MediaPlayer can buffer as the response arrives.
-            while (readPipe == null && isActive) yield()
-            if (token != playToken || readPipe == null) return@launch
-            val player = MediaPlayer()
-            mediaPlayer = player
-            player.setDataSource(readPipe!!.fileDescriptor)
+    }
+
+    private fun prepareFile(file: File, token: Int) {
+        if (token != playToken) {
+            file.delete()
+            return
+        }
+        audioFile = file
+        val player = MediaPlayer()
+        mediaPlayer = player
+        try {
+            player.setDataSource(file.absolutePath)
             player.setOnPreparedListener {
                 if (token == playToken) {
+                    isPrepared = true
                     it.start()
                     onPlayingChanged(true)
                     startProgressUpdates(token)
@@ -274,27 +305,42 @@ private class StreamingAudioPlayer(
             }
             player.setOnCompletionListener {
                 if (token == playToken) {
+                    isPrepared = false
                     onPlayingChanged(false)
                     onCompleted()
                 }
             }
-            player.setOnErrorListener { _, _, _ ->
-                if (token == playToken) onPlayingChanged(false)
+            player.setOnErrorListener { failedPlayer, what, extra ->
+                if (token == playToken) {
+                    isPrepared = false
+                    onPlayingChanged(false)
+                    onError("音频解码失败（what=$what, extra=$extra），下载文件可能不是有效的 MP3 音频")
+                    failedPlayer.reset()
+                }
                 true
             }
             player.prepareAsync()
+        } catch (error: IOException) {
+            player.release()
+            mediaPlayer = null
+            file.delete()
+            audioFile = null
+            if (token == playToken) {
+                onPlayingChanged(false)
+                onError("播放器初始化失败：${error.message ?: "未知错误"}")
+            }
         }
     }
 
     fun togglePause() {
-        mediaPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
-                onPlayingChanged(false)
-            } else {
-                it.start()
-                onPlayingChanged(true)
-            }
+        val player = mediaPlayer ?: return
+        if (!isPrepared) return
+        if (player.isPlaying) {
+            player.pause()
+            onPlayingChanged(false)
+        } else {
+            player.start()
+            onPlayingChanged(true)
         }
     }
 
@@ -305,18 +351,19 @@ private class StreamingAudioPlayer(
                 mediaPlayer?.let { player ->
                     onProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
                 }
-                delay(250)
+                delay(250.milliseconds)
             }
         }
     }
 
     private fun stopCurrent() {
+        downloadJob?.cancel()
         progressJob?.cancel()
-        writeJob?.cancel()
+        isPrepared = false
         mediaPlayer?.release()
         mediaPlayer = null
-        readPipe?.close()
-        readPipe = null
+        audioFile?.delete()
+        audioFile = null
     }
 
     fun release() {
@@ -327,4 +374,5 @@ private class StreamingAudioPlayer(
 }
 
 private const val DEFAULT_BUFFER_SIZE = 16 * 1024
+
 

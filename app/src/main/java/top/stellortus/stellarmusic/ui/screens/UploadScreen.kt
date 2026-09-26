@@ -80,9 +80,9 @@ fun UploadScreen() {
             )
         }
     }
-    if(userName == "") {
+    if (userName.isNullOrEmpty()) {
         Text("请先设置用户名！")
-    }else {
+    } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,6 +119,7 @@ fun UploadScreen() {
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium
                 )
+
                 is UploadState.Error -> Text(
                     text = currentState.message,
                     color = MaterialTheme.colorScheme.error,
@@ -180,6 +181,7 @@ fun UploadScreen() {
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium
                 )
+
                 is DeleteState.Error -> Text(
                     text = currentState.message,
                     color = MaterialTheme.colorScheme.error,
