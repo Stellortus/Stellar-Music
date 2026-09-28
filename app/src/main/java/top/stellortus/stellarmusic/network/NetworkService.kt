@@ -5,9 +5,9 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
-import io.ktor.client.request.get
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Headers
@@ -21,6 +21,12 @@ import java.io.File
 
 object NetworkService {
     val client: HttpClient = HttpClient(OkHttp) {
+        engine {
+            config {
+                // 复用连接，提升流式下载效率
+                retryOnConnectionFailure(true)
+            }
+        }
         install(ContentNegotiation) {
             json(
                 Json {

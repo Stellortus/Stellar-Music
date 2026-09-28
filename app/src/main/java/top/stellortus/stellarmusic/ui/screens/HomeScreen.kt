@@ -1,13 +1,15 @@
 package top.stellortus.stellarmusic.ui.screens
 
-import android.content.Context
-import android.media.MediaPlayer
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +18,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -29,29 +30,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.readAvailable
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import top.stellortus.stellarmusic.R
+import top.stellortus.stellarmusic.StreamPlayer
+import kotlin.math.abs
 import top.stellortus.stellarmusic.data.Track
 import top.stellortus.stellarmusic.network.NetworkService
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import kotlin.time.Duration.Companion.milliseconds
+import top.stellortus.stellarmusic.ui.ToastManager
 
 private sealed interface MusicListState {
     data object Loading : MusicListState
@@ -66,20 +62,25 @@ fun HomeScreen() {
     var isPlaying by remember { mutableStateOf(false) }
     var positionMs by remember { mutableFloatStateOf(0f) }
     var durationMs by remember { mutableFloatStateOf(0f) }
+    var dragPositionMs by remember { mutableStateOf<Float?>(null) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     val appContext = LocalContext.current
     val player = remember {
-        StreamingAudioPlayer(
+        StreamPlayer(
             context = appContext,
             onPlayingChanged = { isPlaying = it },
             onProgressChanged = { position, duration ->
                 positionMs = position.toFloat()
                 durationMs = duration.toFloat()
+                dragPositionMs?.let { pending ->
+                    if (abs(position - pending) < 1000f) dragPositionMs = null
+                }
             },
             onError = { playbackError = it },
             onCompleted = {
                 isPlaying = false
                 positionMs = 0f
+                dragPositionMs = null
             }
         )
     }
@@ -108,6 +109,7 @@ fun HomeScreen() {
                         playingId = track.id
                         positionMs = 0f
                         durationMs = 0f
+                        dragPositionMs = null
                         playbackError = null
                         player.play(track.id)
                     }
@@ -119,12 +121,17 @@ fun HomeScreen() {
                         isPlaying = isPlaying,
                         positionMs = positionMs,
                         durationMs = durationMs,
-                        onPlayPause = { player.togglePause() }
+                        dragPositionMs = dragPositionMs,
+                        onPlayPause = { player.togglePause() },
+                        onValueChange = { dragPositionMs = it },
+                        onValueChangeFinished = {
+                            dragPositionMs?.let { player.seekTo(it.toLong()) }
+                        }
                     )
                 }
             }
         }
-        is MusicListState.Error -> ErrorContent(currentState.message)
+        is MusicListState.Error -> ToastManager.MakeText(currentState.message)
     }
 }
 
@@ -199,7 +206,10 @@ private fun PlayerCard(
     isPlaying: Boolean,
     positionMs: Float,
     durationMs: Float,
-    onPlayPause: () -> Unit
+    dragPositionMs: Float?,
+    onPlayPause: () -> Unit,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -207,18 +217,23 @@ private fun PlayerCard(
                 overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPlayPause) {
-                    // 暂时使用左右箭头作为播放/暂停图标，后续可替换资源。
                     Icon(
                         painter = painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                         contentDescription = if (isPlaying) "暂停" else "播放"
                     )
                 }
-                Slider(
-                    value = positionMs,
-                    onValueChange = {},
-                    valueRange = 0f..durationMs.coerceAtLeast(1f),
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
+                SeekBar(
+                    value = dragPositionMs ?: positionMs,
+                    durationMs = durationMs,
+                    onValueChange = onValueChange,
+                    onValueChangeFinished = onValueChangeFinished,
+                    modifier = Modifier.weight(1f).height(24.dp),
+
+                )
+                Text(
+                    text = "${formatTime(dragPositionMs ?: positionMs)} / ${formatTime(durationMs)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }
@@ -226,153 +241,86 @@ private fun PlayerCard(
 }
 
 @Composable
-private fun ErrorContent(message: String) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) { Text(message, color = MaterialTheme.colorScheme.error) }
-}
-
-private class StreamingAudioPlayer(
-    private val context: Context,
-    private val onPlayingChanged: (Boolean) -> Unit,
-    private val onProgressChanged: (Int, Int) -> Unit,
-    private val onError: (String) -> Unit,
-    private val onCompleted: () -> Unit
+private fun SeekBar(
+    value: Float,
+    durationMs: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    private var mediaPlayer: MediaPlayer? = null
-    private var audioFile: File? = null
-    private var downloadJob: Job? = null
-    private var progressJob: Job? = null
-    private var playToken = 0
-    private var isPrepared = false
-    private val scope = CoroutineScope(Dispatchers.Main.immediate)
+    val maxValue = durationMs.coerceAtLeast(1f)
+    val fraction = (value / maxValue).coerceIn(0f, 1f)
+    val inactiveTrackColor = MaterialTheme.colorScheme.secondary
+    val activeTrackColor = MaterialTheme.colorScheme.primary
+    val thumbColor = MaterialTheme.colorScheme.primary
 
-    fun play(id: Int) {
-        val token = ++playToken
-        stopCurrent()
-        onPlayingChanged(false)
-        downloadJob = scope.launch(Dispatchers.IO) {
-            val file = File.createTempFile("stellar-track-", ".mp3", context.cacheDir)
-            try {
-                val response = NetworkService.get(id)
-                if (!response.status.isSuccess()) {
-                    throw IOException("服务器返回 HTTP ${response.status.value}")
-                }
-                val channel = response.bodyAsChannel()
-                FileOutputStream(file).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (isActive) {
-                        val count = channel.readAvailable(buffer)
-                        if (count == -1) break
-                        if (count > 0) output.write(buffer, 0, count)
+    Canvas(
+        modifier = modifier
+            .pointerInput(maxValue) {
+                detectTapGestures { offset ->
+                    val width = size.width.toFloat()
+                    if (width > 0f) {
+                        onValueChange((offset.x / width).coerceIn(0f, 1f) * maxValue)
+                        onValueChangeFinished()
                     }
                 }
-                if (!isActive || token != playToken) {
-                    file.delete()
-                    return@launch
-                }
-                if (file.length() == 0L) throw IOException("服务器返回了空音频")
-                withContext(Dispatchers.Main.immediate) { prepareFile(file, token) }
-            } catch (error: Throwable) {
-                file.delete()
-                if (token == playToken) {
-                    onPlayingChanged(false)
-                    onError("音频下载失败：${error.message ?: "未知错误"}")
+            }
+            .pointerInput(maxValue) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val width = size.width.toFloat()
+                        if (width > 0f) {
+                            onValueChange((offset.x / width).coerceIn(0f, 1f) * maxValue)
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val width = size.width.toFloat()
+                        if (width > 0f) {
+                            onValueChange(
+                                (change.position.x / width).coerceIn(0f, 1f) * maxValue
+                            )
+                        }
+                    },
+                    onDragEnd = { onValueChangeFinished() },
+                    onDragCancel = { onValueChangeFinished() },
+                )
+            }
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..maxValue)
+                setProgress { target ->
+                    onValueChange(target.coerceIn(0f, maxValue))
+                    onValueChangeFinished()
+                    true
                 }
             }
-        }
-    }
+    ) {
+        val trackHeight = 4.dp.toPx()
+        val y = size.height / 2f
+        val thumbRadius = minOf(6.dp.toPx(), size.width / 2f)
+        val thumbX = (fraction * size.width).coerceIn(thumbRadius, size.width - thumbRadius)
 
-    private fun prepareFile(file: File, token: Int) {
-        if (token != playToken) {
-            file.delete()
-            return
-        }
-        audioFile = file
-        val player = MediaPlayer()
-        mediaPlayer = player
-        try {
-            player.setDataSource(file.absolutePath)
-            player.setOnPreparedListener {
-                if (token == playToken) {
-                    isPrepared = true
-                    it.start()
-                    onPlayingChanged(true)
-                    startProgressUpdates(token)
-                }
-            }
-            player.setOnCompletionListener {
-                if (token == playToken) {
-                    isPrepared = false
-                    onPlayingChanged(false)
-                    onCompleted()
-                }
-            }
-            player.setOnErrorListener { failedPlayer, what, extra ->
-                if (token == playToken) {
-                    isPrepared = false
-                    onPlayingChanged(false)
-                    onError("音频解码失败（what=$what, extra=$extra），下载文件可能不是有效的 MP3 音频")
-                    failedPlayer.reset()
-                }
-                true
-            }
-            player.prepareAsync()
-        } catch (error: IOException) {
-            player.release()
-            mediaPlayer = null
-            file.delete()
-            audioFile = null
-            if (token == playToken) {
-                onPlayingChanged(false)
-                onError("播放器初始化失败：${error.message ?: "未知错误"}")
-            }
-        }
-    }
-
-    fun togglePause() {
-        val player = mediaPlayer ?: return
-        if (!isPrepared) return
-        if (player.isPlaying) {
-            player.pause()
-            onPlayingChanged(false)
-        } else {
-            player.start()
-            onPlayingChanged(true)
-        }
-    }
-
-    private fun startProgressUpdates(token: Int) {
-        progressJob?.cancel()
-        progressJob = scope.launch {
-            while (isActive && token == playToken) {
-                mediaPlayer?.let { player ->
-                    onProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
-                }
-                delay(250.milliseconds)
-            }
-        }
-    }
-
-    private fun stopCurrent() {
-        downloadJob?.cancel()
-        progressJob?.cancel()
-        isPrepared = false
-        mediaPlayer?.release()
-        mediaPlayer = null
-        audioFile?.delete()
-        audioFile = null
-    }
-
-    fun release() {
-        ++playToken
-        stopCurrent()
-        scope.cancel()
+        drawLine(
+            color = inactiveTrackColor,
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = trackHeight,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = activeTrackColor,
+            start = Offset(0f, y),
+            end = Offset(thumbX, y),
+            strokeWidth = trackHeight,
+            cap = StrokeCap.Round,
+        )
+        drawCircle(color = thumbColor, radius = thumbRadius, center = Offset(thumbX, y))
     }
 }
 
-private const val DEFAULT_BUFFER_SIZE = 16 * 1024
-
-
+private fun formatTime(ms: Float): String {
+    val totalSeconds = (ms / 1000f).toLong()
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%02d:%02d".format(minutes, seconds)
+}
