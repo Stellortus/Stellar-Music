@@ -35,8 +35,8 @@ android {
         applicationId = "top.stellortus.stellarmusic"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -95,4 +95,5 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.nextoast)
+    implementation(libs.androidx.navigation.compose)
 }

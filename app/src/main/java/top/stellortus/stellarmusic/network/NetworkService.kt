@@ -8,7 +8,6 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
@@ -35,9 +34,12 @@ object NetworkService {
                 }
             )
         }
+        // 与 AuthApi 一致：已登录时自动附加 Bearer token，否则上传/删除会被服务端拒绝（401）。
+        attachBearerToken()
     }
 
-    suspend fun upload(file: File, uploader: String?): HttpResponse {
+    /** 非 2xx 时抛出 [ApiException]，避免调用方把失败当成成功。 */
+    suspend fun upload(file: File): HttpResponse {
         return client.submitFormWithBinaryData(
             url = "https://$Domain/track/${file.name}",
             formData = formData {
@@ -46,9 +48,7 @@ object NetworkService {
                     append(HttpHeaders.ContentDisposition, "filename=\"${file.name}\"")
                 })
             }
-        ) {
-            uploader?.let { header("Uploader", it) }
-        }
+        ).ensureSuccess()
     }
 
     suspend fun get(id: Int): HttpResponse {
@@ -56,10 +56,10 @@ object NetworkService {
     }
 
     suspend fun delete(id: Int): HttpResponse {
-        return client.delete(fromId(id))
+        return client.delete(fromId(id)).ensureSuccess()
     }
 
     suspend fun getMusicList(): List<Track> {
-        return client.get(trackList()).body()
+        return client.get(trackList()).ensureSuccess().body()
     }
 }

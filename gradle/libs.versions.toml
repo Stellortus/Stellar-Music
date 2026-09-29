@@ -8,12 +8,13 @@ ktorClientCore = "3.6.0"
 ktorClientOkhttp = "3.6.0"
 lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.8.2"
-kotlin = "2.4.20"
+kotlin = "2.2.10"
 composeBom = "2026.02.01"
 media3Exoplayer = "1.4.1"
 media3Session = "1.4.1"
 media3DatasourceOkhttp = "1.4.1"
 nextoast = "1.2.2"
+navigationCompose = "2.9.8"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -38,6 +39,7 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorCli
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktorClientCore" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktorClientCore" }
 nextoast = { module = "io.github.justlikecheese.nextoast:NexToast", version.ref = "nextoast" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

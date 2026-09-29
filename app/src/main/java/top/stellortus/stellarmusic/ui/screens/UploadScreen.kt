@@ -29,10 +29,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.stellortus.stellarmusic.data.NameKey.UserName
-import top.stellortus.stellarmusic.data.PreferencesName.UserInfo
-import top.stellortus.stellarmusic.data.preferences
 import top.stellortus.stellarmusic.network.NetworkService
+import top.stellortus.stellarmusic.network.toUserMessage
 import java.io.File
 
 private sealed interface UploadState {
@@ -56,8 +54,6 @@ fun UploadScreen() {
     var state by remember { mutableStateOf<UploadState>(UploadState.Idle) }
     var musicId by remember { mutableStateOf("") }
     var deleteState by remember { mutableStateOf<DeleteState>(DeleteState.Idle) }
-    val userPreference = preferences(UserInfo)
-    val userName = userPreference.read(UserName)
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -70,126 +66,124 @@ fun UploadScreen() {
                 val file = withContext(Dispatchers.IO) {
                     uri.copyToCache(context)
                 }
-                NetworkService.upload(file, userName)
-                file.delete()
-                file.name
+                try {
+                    // 非 2xx（如 401）会抛出 ApiException，不再误报成功。
+                    NetworkService.upload(file)
+                    file.name
+                } finally {
+                    // 无论成功失败都清掉缓存中的临时文件。
+                    file.delete()
+                }
             }
             state = result.fold(
                 onSuccess = { UploadState.Success(it) },
-                onFailure = { UploadState.Error(it.message ?: "上传失败") }
+                onFailure = { UploadState.Error(it.toUserMessage()) }
             )
         }
     }
-    if (userName.isNullOrEmpty()) {
-        Text("请先设置用户名！")
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "上传音乐",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Text(
+            text = "选择一个音乐文件上传到服务器",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(
+            onClick = { filePicker.launch("audio/*") },
+            enabled = state !is UploadState.Uploading,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = "上传音乐",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                text = "选择一个音乐文件上传到服务器",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-                onClick = { filePicker.launch("audio/*") },
-                enabled = state !is UploadState.Uploading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (state is UploadState.Uploading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                Text(if (state is UploadState.Uploading) "上传中…" else "选择音乐文件")
-            }
-            when (val currentState = state) {
-                UploadState.Idle -> Unit
-                UploadState.Uploading -> Unit
-                is UploadState.Success -> Text(
-                    text = "上传成功：${currentState.fileName}",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
+            if (state is UploadState.Uploading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(end = 8.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
+            }
+            Text(if (state is UploadState.Uploading) "上传中…" else "选择音乐文件")
+        }
+        when (val currentState = state) {
+            UploadState.Idle -> Unit
+            UploadState.Uploading -> Unit
+            is UploadState.Success -> Text(
+                text = "上传成功：${currentState.fileName}",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium
+            )
 
-                is UploadState.Error -> Text(
-                    text = currentState.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            Text(
-                text = "删除音乐",
-                style = MaterialTheme.typography.headlineSmall
+            is UploadState.Error -> Text(
+                text = currentState.message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
             )
-            OutlinedTextField(
-                value = musicId,
-                onValueChange = { value ->
-                    if (value.all(Char::isDigit)) musicId = value
-                },
-                label = { Text("音乐 ID") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                enabled = deleteState !is DeleteState.Deleting,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(
-                onClick = {
-                    val id = musicId.toIntOrNull() ?: return@Button
-                    scope.launch {
-                        deleteState = DeleteState.Deleting
-                        deleteState = runCatching {
-                            val response = NetworkService.delete(id)
-                            check(response.status.value in 200..299) {
-                                "删除失败：HTTP ${response.status.value}"
-                            }
-                            id
-                        }.fold(
-                            onSuccess = {
-                                musicId = ""
-                                DeleteState.Success(it)
-                            },
-                            onFailure = { DeleteState.Error(it.message ?: "删除失败") }
-                        )
-                    }
-                },
-                enabled = musicId.toIntOrNull() != null && deleteState !is DeleteState.Deleting,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (deleteState is DeleteState.Deleting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                Text(if (deleteState is DeleteState.Deleting) "删除中…" else "删除")
-            }
-            when (val currentState = deleteState) {
-                DeleteState.Idle -> Unit
-                DeleteState.Deleting -> Unit
-                is DeleteState.Success -> Text(
-                    text = "删除成功：ID ${currentState.id}",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                is DeleteState.Error -> Text(
-                    text = currentState.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
         }
 
+        Text(
+            text = "删除音乐",
+            style = MaterialTheme.typography.headlineSmall
+        )
+        OutlinedTextField(
+            value = musicId,
+            onValueChange = { value ->
+                if (value.all(Char::isDigit)) musicId = value
+            },
+            label = { Text("音乐 ID") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            enabled = deleteState !is DeleteState.Deleting,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(
+            onClick = {
+                val id = musicId.toIntOrNull() ?: return@Button
+                scope.launch {
+                    deleteState = DeleteState.Deleting
+                    deleteState = runCatching {
+                        NetworkService.delete(id)
+                        id
+                    }.fold(
+                        onSuccess = {
+                            musicId = ""
+                            DeleteState.Success(it)
+                        },
+                        onFailure = { DeleteState.Error(it.toUserMessage()) }
+                    )
+                }
+            },
+            enabled = musicId.toIntOrNull() != null && deleteState !is DeleteState.Deleting,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (deleteState is DeleteState.Deleting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(end = 8.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+            Text(if (deleteState is DeleteState.Deleting) "删除中…" else "删除")
+        }
+        when (val currentState = deleteState) {
+            DeleteState.Idle -> Unit
+            DeleteState.Deleting -> Unit
+            is DeleteState.Success -> Text(
+                text = "删除成功：ID ${currentState.id}",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            is DeleteState.Error -> Text(
+                text = currentState.message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 

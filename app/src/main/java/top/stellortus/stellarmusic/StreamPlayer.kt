@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import top.stellortus.stellarmusic.network.AuthStreamDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,6 +18,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+@UnstableApi
 class StreamPlayer(
     context: Context,
     private val onPlayingChanged: (Boolean) -> Unit,
@@ -28,28 +32,32 @@ class StreamPlayer(
 
     private var progressJob: Job? = null
 
-    private val player: ExoPlayer = ExoPlayer.Builder(appContext).build().apply {
-        addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                onPlayingChanged(isPlaying)
-                if (isPlaying) startProgressLoop() else stopProgressLoop()
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) {
-                    onPlayingChanged(false)
-                    stopProgressLoop()
-                    onCompleted()
+    // 使用带 Bearer token 的数据源，否则播放请求会被服务端以 401 拒绝。
+    private val player: ExoPlayer = ExoPlayer.Builder(appContext)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(AuthStreamDataSource.factory))
+        .build()
+        .apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    onPlayingChanged(isPlaying)
+                    if (isPlaying) startProgressLoop() else stopProgressLoop()
                 }
-            }
 
-            override fun onPlayerError(error: PlaybackException) {
-                stopProgressLoop()
-                onPlayingChanged(false)
-                onError("播放失败：${error.errorCodeName}")
-            }
-        })
-    }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        onPlayingChanged(false)
+                        stopProgressLoop()
+                        onCompleted()
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    stopProgressLoop()
+                    onPlayingChanged(false)
+                    onError("播放失败：${error.errorCodeName}")
+                }
+            })
+        }
 
     fun play(id: Int) {
         player.setMediaItem(MediaItem.fromUri(fromId(id)))

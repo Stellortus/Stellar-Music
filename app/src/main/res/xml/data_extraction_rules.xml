@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+   备份与数据迁移规则。
+
+   allowBackup="false" 已禁用云备份（Google Drive）。但自 Android 12（API 31）起，
+   allowBackup="false" 不再阻止设备到设备（D2D）迁移，旧版 fullBackupContent 规则
+   对 D2D 同样无效，必须在此用 <device-transfer> 显式排除，否则 auth_prefs.xml
+   （内含登录 token、userId、username）仍可能随设备迁移被带走。
+
+   API 30 及以下由 allowBackup="false" 完整覆盖，无需 legacy 规则。
+
+   文件路径依据 AuthPreferences.kt 中 getSharedPreferences("auth_prefs", ...)，
+   实际落盘文件为 shared_prefs/auth_prefs.xml。
+
+   参见 https://developer.android.com/about/versions/12/behavior-changes-12#backup-restore
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="auth_prefs.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="auth_prefs.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>
