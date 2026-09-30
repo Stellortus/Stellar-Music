@@ -1,4 +1,4 @@
-package top.stellortus.stellarmusic.ui.screens
+package top.stellortus.stellarmusic.ui.screens.account
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,9 +37,6 @@ import top.stellortus.stellarmusic.network.toUserMessage
 private const val ROUTE_LOGIN = "login"
 private const val ROUTE_REGISTER = "register"
 
-/**
- * 未登录时的认证导航：在 login 与 register 两个路由之间切换。
- */
 @Composable
 fun AccountScreen(onLoggedIn: () -> Unit) {
     val navController = rememberNavController()
@@ -78,7 +74,7 @@ private fun LoginScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("登录", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(
@@ -151,7 +147,7 @@ private fun RegisterScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("注册", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(

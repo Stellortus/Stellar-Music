@@ -1,4 +1,4 @@
-package top.stellortus.stellarmusic.ui.screens
+package top.stellortus.stellarmusic.ui.screens.account
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,9 +24,6 @@ import top.stellortus.stellarmusic.data.AuthPreferences
 import top.stellortus.stellarmusic.network.AuthApi
 import top.stellortus.stellarmusic.network.toUserMessage
 
-/**
- * 已登录的“我的”页面：展示当前用户名并提供登出。
- */
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
     val context = LocalContext.current
@@ -38,8 +35,8 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.Start,
     ) {
         Text("我的", style = MaterialTheme.typography.headlineMedium)
         Text("用户名：$username", style = MaterialTheme.typography.bodyLarge)

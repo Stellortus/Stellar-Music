@@ -8,6 +8,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
@@ -22,7 +23,6 @@ object NetworkService {
     val client: HttpClient = HttpClient(OkHttp) {
         engine {
             config {
-                // 复用连接，提升流式下载效率
                 retryOnConnectionFailure(true)
             }
         }
@@ -34,11 +34,9 @@ object NetworkService {
                 }
             )
         }
-        // 与 AuthApi 一致：已登录时自动附加 Bearer token，否则上传/删除会被服务端拒绝（401）。
         attachBearerToken()
     }
 
-    /** 非 2xx 时抛出 [ApiException]，避免调用方把失败当成成功。 */
     suspend fun upload(file: File): HttpResponse {
         return client.submitFormWithBinaryData(
             url = "https://$Domain/track/${file.name}",
@@ -59,7 +57,25 @@ object NetworkService {
         return client.delete(fromId(id)).ensureSuccess()
     }
 
-    suspend fun getMusicList(): List<Track> {
-        return client.get(trackList()).ensureSuccess().body()
+    suspend fun getMusicList(start: Int = 0): List<Track> {
+        return client.get(trackList()) {
+            parameter("start", start)
+        }.ensureSuccess().body()
+    }
+
+    /**
+     * 分页拉取直到某一页为空，用于需要完整歌曲列表的场景（如歌单的选择器）。
+     * 服务端单次最多返回 10 条，[maxTracks] 只是防止服务端异常时无限循环。
+     */
+    suspend fun getAllMusicList(maxTracks: Int = 500): List<Track> {
+        val all = mutableListOf<Track>()
+        var start = 0
+        while (all.size < maxTracks) {
+            val page = getMusicList(start)
+            if (page.isEmpty()) break
+            all += page
+            start += page.size
+        }
+        return all.take(maxTracks)
     }
 }

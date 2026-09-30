@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -27,7 +29,10 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -40,11 +45,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
 import top.stellortus.stellarmusic.R
 import top.stellortus.stellarmusic.StreamPlayer
 import kotlin.math.abs
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import top.stellortus.stellarmusic.data.Track
 import top.stellortus.stellarmusic.network.NetworkService
 import top.stellortus.stellarmusic.ui.ToastManager
@@ -55,6 +65,7 @@ private sealed interface MusicListState {
     data class Error(val message: String) : MusicListState
 }
 
+@UnstableApi
 @Composable
 fun HomeScreen() {
     var state by remember { mutableStateOf<MusicListState>(MusicListState.Loading) }
@@ -64,7 +75,11 @@ fun HomeScreen() {
     var durationMs by remember { mutableFloatStateOf(0f) }
     var dragPositionMs by remember { mutableStateOf<Float?>(null) }
     var playbackError by remember { mutableStateOf<String?>(null) }
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var endReached by remember { mutableStateOf(false) }
     val appContext = LocalContext.current
+    val scope = rememberCoroutineScope()
     val player = remember {
         StreamPlayer(
             context = appContext,
@@ -90,11 +105,39 @@ fun HomeScreen() {
     }
 
     LaunchedEffect(Unit) {
-        state = runCatching { NetworkService.getMusicList() }
+        state = runCatching { NetworkService.getMusicList(currentIndex) }
             .fold(
-                onSuccess = { MusicListState.Success(it) },
+                onSuccess = {
+                    currentIndex = it.size
+                    endReached = it.isEmpty()
+                    MusicListState.Success(it)
+                },
                 onFailure = { MusicListState.Error(it.message ?: "获取音乐列表失败") }
             )
+    }
+
+    val loadMore: () -> Unit = remember {
+        {
+            if (!isLoadingMore && !endReached && state is MusicListState.Success) {
+                isLoadingMore = true
+                scope.launch {
+                    runCatching { NetworkService.getMusicList(currentIndex) }
+                        .onSuccess { page ->
+                            currentIndex += page.size
+                            val existing = (state as? MusicListState.Success)?.tracks.orEmpty()
+                            val known = existing.mapTo(mutableSetOf()) { it.id }
+                            val fresh = page.filter { known.add(it.id) }
+                            if (fresh.isEmpty()) {
+                                endReached = true
+                            } else {
+                                state = MusicListState.Success(existing + fresh)
+                            }
+                        }
+                        .onFailure { ToastManager.makeText(appContext, it.message ?: "加载更多失败") }
+                    isLoadingMore = false
+                }
+            }
+        }
     }
 
     when (val currentState = state) {
@@ -104,6 +147,9 @@ fun HomeScreen() {
             Column(modifier = Modifier.fillMaxSize()) {
                 TrackList(
                     tracks = currentState.tracks,
+                    isLoadingMore = isLoadingMore,
+                    endReached = endReached,
+                    onLoadMore = loadMore,
                     modifier = Modifier.weight(1f),
                     onTrackClick = { track ->
                         playingId = track.id
@@ -131,7 +177,7 @@ fun HomeScreen() {
                 }
             }
         }
-        is MusicListState.Error -> ToastManager.MakeText(currentState.message)
+        is MusicListState.Error -> ToastManager.makeText(currentState.message)
     }
 }
 
@@ -150,9 +196,29 @@ private fun LoadingContent() {
 @Composable
 private fun TrackList(
     tracks: List<Track>,
+    isLoadingMore: Boolean,
+    endReached: Boolean,
+    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
     onTrackClick: (Track) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    val currentOnLoadMore by rememberUpdatedState(onLoadMore)
+
+    // 列表最后一项（曲目或底部提示）进入可视区域即视为已滑到底部，继续下滑就请求下一页；
+    // tracks 变化后重启，这样一页填不满屏幕时会继续补下一页
+    LaunchedEffect(listState, tracks.size) {
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                ?: return@snapshotFlow false
+            lastVisible >= layoutInfo.totalItemsCount - 1
+        }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect { currentOnLoadMore() }
+    }
+
     Column(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -162,15 +228,49 @@ private fun TrackList(
             Text("暂无音乐", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(tracks, key = { it.id }) { track ->
                     TrackItem(track, onClick = { onTrackClick(track) })
                 }
+                if (isLoadingMore) {
+                    item(key = "loading-more") { LoadingMoreFooter() }
+                } else if (endReached) {
+                    item(key = "end-reached") { EndReachedFooter() }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun LoadingMoreFooter() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        Text(
+            "正在加载更多…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun EndReachedFooter() {
+    Text(
+        "已经到底啦",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+    )
 }
 
 @Composable

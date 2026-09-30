@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,16 +34,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
 import top.stellortus.stellarmusic.data.AuthPreferences
-import top.stellortus.stellarmusic.lang.Language
-import top.stellortus.stellarmusic.lang.localNameOf
 import top.stellortus.stellarmusic.network.ApiException
 import top.stellortus.stellarmusic.network.AuthApi
 import top.stellortus.stellarmusic.ui.BottomTab
+import top.stellortus.stellarmusic.ui.BottomTab.AccountTab
 import top.stellortus.stellarmusic.ui.BottomTab.HomeTab
-import top.stellortus.stellarmusic.ui.screens.AccountScreen
+import top.stellortus.stellarmusic.ui.BottomTab.PlayListTab
+import top.stellortus.stellarmusic.ui.BottomTab.UploadTab
+import top.stellortus.stellarmusic.ui.screens.account.AccountScreen
 import top.stellortus.stellarmusic.ui.screens.HomeScreen
-import top.stellortus.stellarmusic.ui.screens.ProfileScreen
+import top.stellortus.stellarmusic.ui.screens.PlayListScreen
+import top.stellortus.stellarmusic.ui.screens.account.ProfileScreen
 import top.stellortus.stellarmusic.ui.screens.UploadScreen
 import top.stellortus.stellarmusic.ui.theme.StellarMusicTheme
 
@@ -111,10 +115,10 @@ private fun MusicApp() {
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 private fun MainScreen(onLogout: () -> Unit) {
     var selectedItem by remember { mutableStateOf(HomeTab) }
-    val language = Language.zh_CN
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -133,7 +137,7 @@ private fun MainScreen(onLogout: () -> Unit) {
                         },
                         label = {
                             Text(
-                                text = item.displayName.localNameOf(language),
+                                text = item.displayName,
                                 style = MaterialTheme.typography.labelMedium
                             )
                         }
@@ -150,10 +154,10 @@ private fun MainScreen(onLogout: () -> Unit) {
             verticalArrangement = Arrangement.Center
         ) {
             when (selectedItem) {
-                BottomTab.HomeTab -> HomeScreen()
-                BottomTab.ListIcon -> Unit
-                BottomTab.UploadTab -> UploadScreen()
-                BottomTab.AccountIcon -> ProfileScreen(onLogout)
+                HomeTab -> HomeScreen()
+                PlayListTab -> PlayListScreen()
+                UploadTab -> UploadScreen()
+                AccountTab -> ProfileScreen(onLogout)
             }
         }
     }
