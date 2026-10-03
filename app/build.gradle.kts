@@ -26,7 +26,7 @@ android {
         }
     }
 
-    namespace = "top.stellortus.stellarmusic"
+    namespace = "top.stellortus.stellar_music"
     compileSdk {
         version = release(37)
     }
@@ -35,8 +35,8 @@ android {
         applicationId = "top.stellortus.stellarmusic"
         minSdk = 24
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -96,4 +96,5 @@ dependencies {
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.nextoast)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.stellar.music.common)
 }
