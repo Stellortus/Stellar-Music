@@ -1,5 +1,9 @@
 package top.stellortus.stellar_music.ui.screens.playlist
 
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
+import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,15 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,20 +25,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.network.PlaylistApi
 import top.stellortus.stellar_music.ui.ToastManager
-import top.stellortus.stellar_music_common.dto.PlaylistDetailResponse
-import top.stellortus.stellar_music_common.dto.Track
+import top.stellortus.stellar_music.ui.player.MusicPlayerState
+import top.stellortus.stellar_music_common.dto.PlaylistDetail
 import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
 
+@OptIn(UnstableApi::class)
 @Composable
-fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
+fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var selectedTrack by remember { mutableStateOf<top.stellortus.stellar_music_common.dto.Track?>(null) }
 
-    var detail by remember { mutableStateOf<PlaylistDetailResponse?>(null) }
+    var detail by remember { mutableStateOf<PlaylistDetail?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var reloadTick by remember { mutableIntStateOf(0) }
@@ -58,44 +55,51 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
         errorMessage = null
         runCatching { PlaylistApi.getPlaylist(playlistId) }
             .onSuccess { detail = it }
-            .onFailure { errorMessage = it.toPlaylistMessage() }
+            .onFailure {
+                errorMessage = it.toPlaylistMessage()
+                ToastManager.makeText(context, it.toPlaylistMessage())
+            }
         isLoading = false
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxSize().padding(StellarTheme.spacing.page),
+        verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.itemGap)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.gap)
         ) {
-            TextButton(onClick = onBack) { Text("返回") }
-            Text(
-                text = detail?.name ?: "歌单详情",
-                style = MaterialTheme.typography.titleLarge,
+            StellarButton(kind = StellarButtonKind.Text, onClick = onBack) { StellarText("返回") }
+            StellarText(
+                text = "歌单详情",
+                role = StellarTextRole.Title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(
+            StellarButton(kind = StellarButtonKind.Text,
                 enabled = detail != null && !submitting,
                 onClick = {
                     renameText = detail?.name.orEmpty()
                     showRenameDialog = true
                 }
             ) {
-                Text("编辑")
+                StellarText("编辑")
             }
         }
 
         detail?.let { current ->
+            Row(horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.section), verticalAlignment = Alignment.CenterVertically) {
+                CoverPlaceholder(CoverPlaceholderSize.Large)
+                StellarText(current.name, role = StellarTextRole.Title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
             val updatedAt = remember(current.updatedAt) { formatDateTime(current.updatedAt) }
-            Text(
+            StellarText(
                 text = "${current.tracks.size} 首歌曲 · 更新于 $updatedAt",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                role = StellarTextRole.Caption,
+                tone = StellarTone.Secondary
             )
         }
 
@@ -106,7 +110,7 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                StellarLoadingIndicator()
             }
 
             currentError != null -> Column(
@@ -114,12 +118,11 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(currentError, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(
+                StellarButton(kind = StellarButtonKind.Outlined,
                     onClick = { reloadTick++ },
-                    modifier = Modifier.padding(top = 12.dp)
+                    modifier = Modifier.padding(top = StellarTheme.spacing.itemGap)
                 ) {
-                    Text("重试")
+                    StellarText("重试")
                 }
             }
 
@@ -127,46 +130,37 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text("歌单里还没有歌曲", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                StellarEmptyState("歌单里还没有歌曲")
             }
 
             else -> {
                 val tracks = current.tracks.distinctBy { it.id }
                 LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
-                        TrackRow(
+                        TrackItem(
                             track = track,
-                            enabled = !submitting,
-                            onRemove = {
-                                scope.launch {
-                                    submitting = true
-                                    runCatching { PlaylistApi.removeTrack(playlistId, track.id) }
-                                        .onSuccess { reloadTick++ }
-                                        .onFailure { ToastManager.makeText(context, it.toPlaylistMessage()) }
-                                    submitting = false
-                                }
-                            }
+                            onClick = { player.play(track) },
+                            onLongClick = { selectedTrack = track },
+                            isCurrent = player.currentTrack?.id == track.id,
+                            showDivider = index < tracks.lastIndex
                         )
-                        if (index < tracks.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                        }
                     }
                 }
             }
         }
 
-        Button(
+        StellarButton(kind = StellarButtonKind.Primary,
             onClick = { showAddDialog = true },
             enabled = detail != null && !submitting,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("添加歌曲")
+            StellarText("添加歌曲")
         }
     }
 
+    selectedTrack?.let { track ->
+        TrackDetails(track) { selectedTrack = null }
+    }
     if (showAddDialog) {
         AddTracksDialog(
             existingTrackIds = detail?.tracks?.map { it.id }?.toSet().orEmpty(),
@@ -187,27 +181,30 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
     }
 
     if (showRenameDialog) {
-        AlertDialog(
+        StellarAlertDialog(
             onDismissRequest = { if (!submitting) showRenameDialog = false },
-            title = { Text("重命名歌单") },
+            title = "重命名歌单",
             text = {
-                OutlinedTextField(
+                StellarTextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    label = { Text("歌单名称") },
+                    label = "歌单名称",
                     singleLine = true
                 )
             },
             confirmButton = {
-                TextButton(
+                StellarButton(kind = StellarButtonKind.Secondary,
                     enabled = renameText.isNotBlank() && !submitting,
                     onClick = {
                         val name = renameText.trim()
                         scope.launch {
                             submitting = true
                             runCatching {
+                                // Detail DTO omits public; read the current summary rather than using a default.
+                                val summary = PlaylistApi.listPlaylists().find { it.id == playlistId }
+                                    ?: error("无法读取歌单公开状态，请稍后重试")
                                 PlaylistApi.updatePlaylist(playlistId,
-                                    UpdatePlaylistRequest(name = name)
+                                    UpdatePlaylistRequest(name = name, public = summary.public)
                                 )
                             }
                                 .onSuccess {
@@ -219,44 +216,12 @@ fun PlaylistDetailScreen(playlistId: Int, onBack: () -> Unit) {
                         }
                     }
                 ) {
-                    Text("保存")
+                    StellarText("保存")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }, enabled = !submitting) { Text("取消") }
+                StellarButton(kind = StellarButtonKind.Text, onClick = { showRenameDialog = false }, enabled = !submitting) { StellarText("取消") }
             }
         )
-    }
-}
-
-@Composable
-private fun TrackRow(track: Track, enabled: Boolean, onRemove: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                track.title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                track.artists.joinToString(" / ").ifBlank { "未知歌手" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                "上传者：${track.uploader}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        TextButton(onClick = onRemove, enabled = enabled) {
-            Text("移除", color = MaterialTheme.colorScheme.error)
-        }
     }
 }

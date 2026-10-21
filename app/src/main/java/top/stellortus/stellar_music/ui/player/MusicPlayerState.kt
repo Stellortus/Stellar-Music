@@ -64,6 +64,8 @@ class MusicPlayerState(context: Context) {
 
     fun togglePause() = player.togglePause()
 
+    fun clearPlaybackError() { playbackError = null }
+
     /** 拖动期间只更新预览位置，松手才真正 seek，避免拖动被进度回调打断。 */
     fun onSeekPreview(value: Float) {
         dragPositionMs = value

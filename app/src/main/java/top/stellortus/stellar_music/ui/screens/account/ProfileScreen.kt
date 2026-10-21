@@ -1,14 +1,14 @@
 package top.stellortus.stellar_music.ui.screens.account
 
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,12 +18,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import top.stellortus.stellar_music.ui.ToastManager
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.data.AuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
-
 
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
@@ -32,42 +33,37 @@ fun ProfileScreen(onLogout: () -> Unit) {
     val prefs = AuthPreferences.getInstance(context)
     val username = prefs.username.orEmpty()
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text("我的", style = MaterialTheme.typography.headlineMedium)
-        Text("用户名：$username", style = MaterialTheme.typography.bodyLarge)
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-        }
-        Button(
-            onClick = {
-                scope.launch {
-                    loading = true
-                    error = null
-                    runCatching { AuthApi.logout() }
-                        .onSuccess {
-                            prefs.clear()
-                            onLogout()
-                        }
-                        .onFailure { e -> error = e.toUserMessage() }
-                    loading = false
-                }
-            },
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth(),
+        Column(
+            modifier = Modifier.padding(horizontal = StellarTheme.spacing.page).padding(vertical = StellarTheme.spacing.page),
+            verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.section)
         ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
+            ProfileIdentity(username, prefs.userId)
+
+            StellarButton(kind = StellarButtonKind.Primary, loading = loading,
+                onClick = {
+                    scope.launch {
+                        loading = true
+
+                        runCatching { AuthApi.logout() }
+                            .onSuccess {
+                                prefs.clear()
+                                onLogout()
+                            }
+                            .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                        loading = false
+                    }
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                StellarText(if (loading) "退出中…" else "退出登录")
             }
-            Text(if (loading) "退出中…" else "退出登录")
+            VersionFooter(Modifier.safeDrawingPadding())
         }
     }
 }
