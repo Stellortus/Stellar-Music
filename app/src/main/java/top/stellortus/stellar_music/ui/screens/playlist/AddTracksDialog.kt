@@ -1,21 +1,14 @@
 package top.stellortus.stellar_music.ui.screens.playlist
 
-import androidx.compose.foundation.clickable
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,8 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import top.stellortus.stellar_music.network.NetworkService
 import top.stellortus.stellar_music_common.dto.Track
 
@@ -39,98 +30,62 @@ fun AddTracksDialog(
     onDismiss: () -> Unit,
     onConfirm: (List<Int>) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var reloadTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var selectedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadTick) {
         isLoading = true
         errorMessage = null
         runCatching { NetworkService.getAllMusicList() }
             .onSuccess { tracks = it.distinctBy { track -> track.id } }
-            .onFailure { errorMessage = it.toPlaylistMessage() }
+            .onFailure { errorMessage = it.toPlaylistMessage(); top.stellortus.stellar_music.ui.ToastManager.makeText(context, it.toPlaylistMessage()) }
         isLoading = false
     }
 
-    AlertDialog(
+    StellarAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加歌曲") },
+        title = "添加歌曲",
         text = {
             when {
                 isLoading -> Box(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = StellarTheme.sizes.loadingArea),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    StellarLoadingIndicator()
                 }
 
-                errorMessage != null -> Text(
-                    errorMessage!!,
-                    color = MaterialTheme.colorScheme.error
-                )
+                errorMessage != null -> StellarButton(kind = StellarButtonKind.Text, onClick = { reloadTick++ }) { StellarText("重试") }
 
-                tracks.isEmpty() -> Text("曲库中还没有歌曲", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                tracks.isEmpty() -> StellarEmptyState("曲库中还没有歌曲")
 
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = StellarTheme.sizes.dialogHeight),
+                    verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.small)
                 ) {
                     items(tracks, key = { it.id }) { track ->
                         val alreadyAdded = track.id in existingTrackIds
                         val checked = alreadyAdded || track.id in selectedIds
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !alreadyAdded) {
-                                    selectedIds = if (track.id in selectedIds) {
-                                        selectedIds - track.id
-                                    } else {
-                                        selectedIds + track.id
-                                    }
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = null,
-                                enabled = !alreadyAdded
-                            )
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text(
-                                    track.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = if (alreadyAdded) {
-                                        "已在歌单中"
-                                    } else {
-                                        track.artists.joinToString(" / ").ifBlank { "未知歌手" }
-                                    },
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                        TrackChoiceRow(track, selected = checked, alreadyAdded = alreadyAdded) {
+                            selectedIds = if (track.id in selectedIds) selectedIds - track.id else selectedIds + track.id
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(
+            StellarButton(kind = StellarButtonKind.Secondary,
                 onClick = { onConfirm(selectedIds.toList()) },
                 enabled = selectedIds.isNotEmpty() && !isLoading
             ) {
-                Text("添加")
+                StellarText("添加")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            StellarButton(kind = StellarButtonKind.Text, onClick = onDismiss) { StellarText("取消") }
         }
     )
 }

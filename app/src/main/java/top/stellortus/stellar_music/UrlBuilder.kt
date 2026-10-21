@@ -15,6 +15,7 @@ fun authMeUrl() = "https://$Domain/auth/me"
 fun authLogoutUrl() = "https://$Domain/auth/logout"
 
 fun playlistsUrl() = "https://$Domain/playlists"
+fun playlistSearchUrl() = "${playlistsUrl()}/search"
 
 fun playlistUrl(id: Int) = "https://$Domain/playlists/$id"
 fun playlistTracks(id: Int) = "https://$Domain/playlists/$id/tracks"

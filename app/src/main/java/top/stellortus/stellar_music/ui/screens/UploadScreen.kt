@@ -1,19 +1,17 @@
 package top.stellortus.stellar_music.ui.screens
 
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,7 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,53 +64,42 @@ fun UploadScreen() {
             }
             state = result.fold(
                 onSuccess = { UploadState.Success(it) },
-                onFailure = { UploadState.Error(it.toUserMessage()) }
+                onFailure = { top.stellortus.stellar_music.ui.ToastManager.makeText(context, it.toUserMessage()); UploadState.Error(it.toUserMessage()) }
             )
         }
     }
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize().verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text = "上传音乐",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            text = "选择一个音乐文件上传到服务器",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = { filePicker.launch("audio/*") },
-            enabled = state !is UploadState.Uploading,
-            modifier = Modifier.fillMaxWidth()
+        FormCard(
+            Modifier.padding(horizontal = StellarTheme.spacing.page).padding(vertical = StellarTheme.spacing.page)
         ) {
-            if (state is UploadState.Uploading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
+            CoverPlaceholder(CoverPlaceholderSize.Large)
+            StellarText(
+                text = "选择一个音乐文件上传到服务器",
+                role = StellarTextRole.BodySmall,
+                tone = StellarTone.Secondary
+            )
+            StellarButton(kind = StellarButtonKind.Primary, loading = state is UploadState.Uploading,
+                onClick = { filePicker.launch("audio/*") },
+                enabled = state !is UploadState.Uploading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                StellarText(if (state is UploadState.Uploading) "上传中…" else "选择音乐文件")
             }
-            Text(if (state is UploadState.Uploading) "上传中…" else "选择音乐文件")
-        }
-        when (val currentState = state) {
-            UploadState.Idle -> Unit
-            UploadState.Uploading -> Unit
-            is UploadState.Success -> Text(
-                text = "上传成功：${currentState.fileName}",
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            when (val currentState = state) {
+                UploadState.Idle -> Unit
+                UploadState.Uploading -> Unit
+                is UploadState.Success -> StellarText(
+                    text = "上传成功：${currentState.fileName}",
+                    tone = StellarTone.Accent,
+                    role = StellarTextRole.BodySmall
+                )
 
-            is UploadState.Error -> Text(
-                text = currentState.message,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
+                is UploadState.Error -> Unit
+            }
         }
     }
 }

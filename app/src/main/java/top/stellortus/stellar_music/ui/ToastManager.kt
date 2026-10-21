@@ -1,10 +1,7 @@
 package top.stellortus.stellar_music.ui
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import io.github.justlikecheese.nextoast.NexToast
 import java.lang.ref.WeakReference
 
@@ -20,9 +17,4 @@ object ToastManager {
         currentToastRef = WeakReference(newToast)
     }
 
-    @SuppressLint("ComposableNaming")
-    @Composable
-    fun makeText(message: String, duration: Int = Toast.LENGTH_SHORT) {
-        makeText(LocalContext.current, message, duration)
-    }
 }

@@ -1,7 +1,10 @@
 package top.stellortus.stellar_music.ui.screens
 
-import androidx.compose.foundation.clickable
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,10 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,10 +27,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -47,7 +43,6 @@ private sealed interface MusicListState {
     data class Error(val message: String) : MusicListState
 }
 
-/** 首页曲库列表。播放器由 MainScreen 持有并通过 [player] 传入，这里只负责列表与翻页。 */
 @UnstableApi
 @Composable
 fun HomeScreen(player: MusicPlayerState) {
@@ -55,10 +50,15 @@ fun HomeScreen(player: MusicPlayerState) {
     var currentIndex by remember { mutableIntStateOf(0) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var endReached by remember { mutableStateOf(false) }
+    var addToPlaylistTarget by remember { mutableStateOf<Track?>(null) }
+    var searchText by remember { mutableStateOf("") }
     val appContext = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    var retryTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(retryTick) {
+        state = MusicListState.Loading
+        currentIndex = 0
         state = runCatching { NetworkService.getMusicList(currentIndex) }
             .fold(
                 onSuccess = {
@@ -66,7 +66,10 @@ fun HomeScreen(player: MusicPlayerState) {
                     endReached = it.isEmpty()
                     MusicListState.Success(it)
                 },
-                onFailure = { MusicListState.Error(it.message ?: "获取音乐列表失败") }
+                onFailure = {
+                    ToastManager.makeText(appContext, it.message ?: "获取音乐列表失败")
+                    MusicListState.Error(it.message.orEmpty())
+                }
             )
     }
 
@@ -94,29 +97,33 @@ fun HomeScreen(player: MusicPlayerState) {
         }
     }
 
-    when (val currentState = state) {
-        MusicListState.Loading -> LoadingContent()
-        is MusicListState.Success -> TrackList(
-            tracks = currentState.tracks,
-            isLoadingMore = isLoadingMore,
-            endReached = endReached,
-            onLoadMore = loadMore,
-            modifier = Modifier.fillMaxSize(),
-            onTrackClick = { player.play(it) }
-        )
-        is MusicListState.Error -> ToastManager.makeText(currentState.message)
+    Column(Modifier.fillMaxSize()) {
+        StellarSearchField(searchText, { searchText = it }, placeholder = "搜索音乐",
+            modifier = Modifier.padding(start = StellarTheme.spacing.page, end = StellarTheme.spacing.page,
+                top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap))
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when (val currentState = state) {
+                MusicListState.Loading -> StellarLoadingState("正在加载音乐列表…")
+                is MusicListState.Success -> TrackList(
+                    tracks = currentState.tracks,
+                    isLoadingMore = isLoadingMore,
+                    endReached = endReached,
+                    onLoadMore = loadMore,
+                    modifier = Modifier.fillMaxSize(),
+                    currentTrackId = player.currentTrack?.id,
+                    onTrackClick = { player.play(it) },
+                    onTrackLongClick = { addToPlaylistTarget = it }
+                )
+                is MusicListState.Error -> StellarRetryAction(onRetry = { retryTick++ })
+            }
+        }
     }
-}
 
-@Composable
-private fun LoadingContent() {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        CircularProgressIndicator()
-        Text("正在加载音乐列表…", modifier = Modifier.padding(top = 16.dp))
+    addToPlaylistTarget?.let { track ->
+        TrackDetails(
+            track = track,
+            onDismiss = { addToPlaylistTarget = null }
+        )
     }
 }
 
@@ -127,7 +134,9 @@ private fun TrackList(
     endReached: Boolean,
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
-    onTrackClick: (Track) -> Unit
+    currentTrackId: Int?,
+    onTrackClick: (Track) -> Unit,
+    onTrackLongClick: (Track) -> Unit
 ) {
     val listState = rememberLazyListState()
     val currentOnLoadMore by rememberUpdatedState(onLoadMore)
@@ -146,37 +155,31 @@ private fun TrackList(
             .collect { currentOnLoadMore() }
     }
 
-    Column(modifier = modifier.padding(vertical = 16.dp)) {
-        Text(
-            "音乐列表",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = StellarTheme.spacing.page)
+    ) {
         if (tracks.isEmpty()) {
-            Text(
-                "暂无音乐",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
+            item(key = "empty") {
+                StellarText("暂无音乐", tone = StellarTone.Secondary,
+                    modifier = Modifier.padding(horizontal = StellarTheme.spacing.page, vertical = StellarTheme.spacing.itemGap))
+            }
         } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
-                    TrackItem(track, onClick = { onTrackClick(track) })
-                    if (index < tracks.lastIndex) {
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
+            itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
+                TrackItem(track, onClick = { onTrackClick(track) },
+                    modifier = Modifier.padding(horizontal = StellarTheme.spacing.homeTrackMargin),
+                    onLongClick = { onTrackLongClick(track) },
+                    isCurrent = currentTrackId == track.id,
+                    showDivider = index < tracks.lastIndex)
+            }
+            if (isLoadingMore) {
+                item(key = "loading-more") {
+                    Column(Modifier.padding(top = StellarTheme.spacing.itemGap)) { LoadingMoreFooter() }
                 }
-                if (isLoadingMore) {
-                    item(key = "loading-more") { LoadingMoreFooter() }
-                } else if (endReached) {
-                    item(key = "end-reached") { EndReachedFooter() }
+            } else if (endReached) {
+                item(key = "end-reached") {
+                    Column(Modifier.padding(top = StellarTheme.spacing.itemGap)) { EndReachedFooter() }
                 }
             }
         }
@@ -186,59 +189,50 @@ private fun TrackList(
 @Composable
 private fun LoadingMoreFooter() {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = StellarTheme.spacing.itemGap),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        Text(
+        StellarLoadingIndicator(size = StellarIndicatorSize.Small, modifier = Modifier.size(StellarTheme.sizes.indicator))
+        StellarText(
             "正在加载更多…",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp)
+            role = StellarTextRole.Caption,
+            tone = StellarTone.Secondary,
+            modifier = Modifier.padding(start = StellarTheme.spacing.gap)
         )
     }
 }
 
 @Composable
 private fun EndReachedFooter() {
-    Text(
+    StellarText(
         "已经到底啦",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        role = StellarTextRole.Caption,
+        tone = StellarTone.Secondary,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = StellarTheme.spacing.itemGap)
     )
 }
 
+@androidx.compose.ui.tooling.preview.Preview(name = "Home Light", widthDp = 360, heightDp = 640)
+@androidx.compose.ui.tooling.preview.Preview(name = "Home Dark", widthDp = 360, heightDp = 640, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@androidx.compose.ui.tooling.preview.Preview(name = "Home Large Text", widthDp = 320, heightDp = 640, fontScale = 1.5f)
 @Composable
-private fun TrackItem(track: Track, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            track.title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            track.artists.joinToString(" / ").ifBlank { "未知歌手" },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("上传者：${track.uploader}", style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("歌曲id：${track.id}", style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun HomePreview() {
+    top.stellortus.stellar_music.ui.theme.StellarMusicTheme {
+        Column(Modifier.fillMaxSize()) {
+            StellarSearchField("", {}, placeholder = "搜索音乐",
+                modifier = Modifier.padding(start = StellarTheme.spacing.page, end = StellarTheme.spacing.page,
+                    top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap))
+            TrackList(
+                modifier = Modifier.weight(1f),
+                tracks = listOf(
+                    Track(1, "星河漫游 · 一首很长的歌名用于检查文本截断", listOf("Stellar", "夜航计划"), "music.mp3", "Listener", "", "", 0L),
+                    Track(2, "晚风与回声", emptyList(), "echo.mp3", "Listener", "", "", 0L)
+                ),
+                isLoadingMore = false, endReached = true, onLoadMore = {},
+                currentTrackId = 1, onTrackClick = {}, onTrackLongClick = {}
+            )
         }
     }
 }

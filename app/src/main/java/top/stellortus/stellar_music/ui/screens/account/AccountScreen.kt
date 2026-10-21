@@ -1,19 +1,19 @@
 package top.stellortus.stellar_music.ui.screens.account
 
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.components.*
+
 import android.content.Context
-import androidx.compose.foundation.layout.Arrangement
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import top.stellortus.stellar_music.ui.ToastManager
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -40,24 +43,61 @@ private const val ROUTE_REGISTER = "register"
 @Composable
 fun AccountScreen(onLoggedIn: () -> Unit) {
     val navController = rememberNavController()
-    NavHost(
-        navController = navController,
-        startDestination = ROUTE_LOGIN,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        composable(ROUTE_LOGIN) {
-            LoginScreen(
-                onLoggedIn = onLoggedIn,
-                onNavigateToRegister = { navController.navigate(ROUTE_REGISTER) },
-            )
+    // Consume system and IME insets once for both the form and footer.
+    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+        NavHost(
+            navController = navController,
+            startDestination = ROUTE_LOGIN,
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
+            modifier = Modifier.weight(1f),
+        ) {
+            composable(ROUTE_LOGIN) {
+                LoginScreen(
+                    onLoggedIn = onLoggedIn,
+                    onNavigateToRegister = { navController.navigate(ROUTE_REGISTER) },
+                )
+            }
+            composable(ROUTE_REGISTER) {
+                RegisterScreen(
+                    onLoggedIn = onLoggedIn,
+                    onNavigateToLogin = { navController.popBackStack() },
+                )
+            }
         }
-        composable(ROUTE_REGISTER) {
-            RegisterScreen(
-                onLoggedIn = onLoggedIn,
-                onNavigateToLogin = { navController.popBackStack() },
-            )
-        }
+        VersionFooter()
     }
+}
+
+/** 账号页底部共用的版本号，从 PackageManager 读取（构建未开启 BuildConfig 生成）。 */
+@Composable
+internal fun VersionFooter(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val versionName = remember(context) {
+        runCatching {
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            info.versionName
+        }.getOrNull() ?: "未知"
+    }
+    StellarText(
+        text = "当前版本 v$versionName",
+        role = StellarTextRole.Caption,
+        tone = StellarTone.Secondary,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = StellarTheme.spacing.itemGap),
+    )
 }
 
 @Composable
@@ -70,64 +110,56 @@ private fun LoginScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+
     ) {
-        Text("登录", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it; error = null },
-            label = { Text("用户名") },
-            singleLine = true,
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it; error = null },
-            label = { Text("密码") },
-            singleLine = true,
-            enabled = !loading,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-        }
-        Button(
-            onClick = {
-                when {
-                    username.isBlank() || password.isBlank() -> error = "请输入用户名和密码"
-                    else -> scope.launch {
-                        loading = true
-                        error = null
-                        runCatching { AuthApi.login(username.trim(), password) }
-                            .onSuccess {
-                                saveAuth(context, it)
-                                onLoggedIn()
-                            }
-                            .onFailure { e -> error = e.toUserMessage() }
-                        loading = false
+        FormCard(Modifier.padding(horizontal = StellarTheme.spacing.page).padding(vertical = StellarTheme.spacing.page)) {
+            StellarTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = "用户名",
+                singleLine = true,
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            StellarTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "密码",
+                singleLine = true,
+                enabled = !loading,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            StellarButton(kind = StellarButtonKind.Primary, loading = loading,
+                onClick = {
+                    when {
+                        username.isBlank() || password.isBlank() -> ToastManager.makeText(context, "请输入用户名和密码")
+                        else -> scope.launch {
+                            loading = true
+
+                            runCatching { AuthApi.login(username.trim(), password) }
+                                .onSuccess {
+                                    saveAuth(context, it)
+                                    onLoggedIn()
+                                }
+                                .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                            loading = false
+                        }
                     }
-                }
-            },
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                StellarText(if (loading) "登录中…" else "登录")
             }
-            Text(if (loading) "登录中…" else "登录")
-        }
-        TextButton(onClick = onNavigateToRegister, enabled = !loading) {
-            Text("没有账号？去注册")
+            StellarButton(kind = StellarButtonKind.Text, onClick = onNavigateToRegister, enabled = !loading) {
+                StellarText("没有账号？去注册")
+            }
         }
     }
 }
@@ -143,76 +175,68 @@ private fun RegisterScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+
     ) {
-        Text("注册", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(
-            value = username,
-            onValueChange = { username = it; error = null },
-            label = { Text("用户名") },
-            singleLine = true,
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it; error = null },
-            label = { Text("密码") },
-            singleLine = true,
-            enabled = !loading,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = confirmPassword,
-            onValueChange = { confirmPassword = it; error = null },
-            label = { Text("确认密码") },
-            singleLine = true,
-            enabled = !loading,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-        }
-        Button(
-            onClick = {
-                when {
-                    username.isBlank() -> error = "请输入用户名"
-                    password.isBlank() -> error = "请输入密码"
-                    confirmPassword != password -> error = "两次输入的密码不一致"
-                    else -> scope.launch {
-                        loading = true
-                        error = null
-                        runCatching { AuthApi.register(username.trim(), password) }
-                            .onSuccess {
-                                saveAuth(context, it)
-                                onLoggedIn()
-                            }
-                            .onFailure { e -> error = e.toUserMessage() }
-                        loading = false
+        FormCard(Modifier.padding(horizontal = StellarTheme.spacing.page).padding(vertical = StellarTheme.spacing.page)) {
+            StellarTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = "用户名",
+                singleLine = true,
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            StellarTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "密码",
+                singleLine = true,
+                enabled = !loading,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            StellarTextField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it },
+                label = "确认密码",
+                singleLine = true,
+                enabled = !loading,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            StellarButton(kind = StellarButtonKind.Primary, loading = loading,
+                onClick = {
+                    when {
+                        username.isBlank() -> ToastManager.makeText(context, "请输入用户名")
+                        password.isBlank() -> ToastManager.makeText(context, "请输入密码")
+                        confirmPassword != password -> ToastManager.makeText(context, "两次输入的密码不一致")
+                        else -> scope.launch {
+                            loading = true
+
+                            runCatching { AuthApi.register(username.trim(), password) }
+                                .onSuccess {
+                                    saveAuth(context, it)
+                                    onLoggedIn()
+                                }
+                                .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                            loading = false
+                        }
                     }
-                }
-            },
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                StellarText(if (loading) "注册中…" else "注册")
             }
-            Text(if (loading) "注册中…" else "注册")
-        }
-        TextButton(onClick = onNavigateToLogin, enabled = !loading) {
-            Text("已有账号？去登录")
+            StellarButton(kind = StellarButtonKind.Text, onClick = onNavigateToLogin, enabled = !loading) {
+                StellarText("已有账号？去登录")
+            }
         }
     }
 }
