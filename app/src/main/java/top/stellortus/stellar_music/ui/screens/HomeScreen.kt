@@ -1,8 +1,5 @@
 package top.stellortus.stellar_music.ui.screens
 
-import top.stellortus.stellar_music.ui.theme.StellarTheme
-import top.stellortus.stellar_music.ui.components.*
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -34,7 +32,18 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.network.NetworkService
 import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.ui.components.StellarIndicatorSize
+import top.stellortus.stellar_music.ui.components.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.components.StellarLoadingState
+import top.stellortus.stellar_music.ui.components.StellarRetryAction
+import top.stellortus.stellar_music.ui.components.StellarSearchField
+import top.stellortus.stellar_music.ui.components.StellarText
+import top.stellortus.stellar_music.ui.components.StellarTextRole
+import top.stellortus.stellar_music.ui.components.StellarTone
+import top.stellortus.stellar_music.ui.components.TrackDetails
+import top.stellortus.stellar_music.ui.components.TrackItem
 import top.stellortus.stellar_music.ui.player.MusicPlayerState
+import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.Track
 
 private sealed interface MusicListState {
@@ -54,6 +63,10 @@ fun HomeScreen(player: MusicPlayerState) {
     var searchText by remember { mutableStateOf("") }
     val appContext = LocalContext.current
     val scope = rememberCoroutineScope()
+    val searchState = remember { TrackSearchState(scope) }
+    val homeListState = rememberLazyListState()
+    val searchListState = rememberLazyListState()
+    var showingSearch by remember { mutableStateOf(false) }
 
     var retryTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(retryTick) {
@@ -97,14 +110,32 @@ fun HomeScreen(player: MusicPlayerState) {
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    if (showingSearch) {
+        TrackSearchScreen(
+            state = searchState,
+            listState = searchListState,
+            onBack = { searchState.cancel(); showingSearch = false },
+            currentTrackId = player.currentTrack?.id,
+            onTrackClick = { player.play(it) },
+            onTrackLongClick = { addToPlaylistTarget = it }
+        )
+    } else Column(Modifier.fillMaxSize()) {
         StellarSearchField(searchText, { searchText = it }, placeholder = "搜索音乐",
+            onSearch = { value ->
+                if (value.isNotBlank()) {
+                    searchState.edit(value.trim())
+                    scope.launch { searchListState.scrollToItem(0) }
+                    showingSearch = true
+                }
+            },
             modifier = Modifier.padding(start = StellarTheme.spacing.page, end = StellarTheme.spacing.page,
-                top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap))
+                top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap),
+            )
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when (val currentState = state) {
                 MusicListState.Loading -> StellarLoadingState("正在加载音乐列表…")
                 is MusicListState.Success -> TrackList(
+                    listState = homeListState,
                     tracks = currentState.tracks,
                     isLoadingMore = isLoadingMore,
                     endReached = endReached,
@@ -136,9 +167,9 @@ private fun TrackList(
     modifier: Modifier = Modifier,
     currentTrackId: Int?,
     onTrackClick: (Track) -> Unit,
-    onTrackLongClick: (Track) -> Unit
+    onTrackLongClick: (Track) -> Unit,
+    listState: LazyListState = rememberLazyListState()
 ) {
-    val listState = rememberLazyListState()
     val currentOnLoadMore by rememberUpdatedState(onLoadMore)
 
     // 列表最后一项（曲目或底部提示）进入可视区域即视为已滑到底部，继续下滑就请求下一页；

@@ -4,10 +4,10 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Modifier
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavType
@@ -30,7 +30,7 @@ private const val ROUTE_PLAYLIST_SEARCH = "$ROUTE_PLAYLISTS/search"
 
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayListScreen(player: MusicPlayerState) {
+fun PlaylistScreen(player: MusicPlayerState) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val searchState = remember { PlaylistSearchState(scope) }
