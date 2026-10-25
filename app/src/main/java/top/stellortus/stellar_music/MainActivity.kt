@@ -38,7 +38,7 @@ import top.stellortus.stellar_music.ui.BottomTab.UploadTab
 import top.stellortus.stellar_music.ui.player.MusicPlayerState
 import top.stellortus.stellar_music.ui.player.PlayerBar
 import top.stellortus.stellar_music.ui.screens.HomeScreen
-import top.stellortus.stellar_music.ui.screens.PlayListScreen
+import top.stellortus.stellar_music.ui.screens.PlaylistScreen
 import top.stellortus.stellar_music.ui.screens.UploadScreen
 import top.stellortus.stellar_music.ui.screens.account.AccountScreen
 import top.stellortus.stellar_music.ui.screens.account.ProfileScreen
@@ -113,6 +113,7 @@ private fun MusicApp() {
 @OptIn(UnstableApi::class)
 @Composable
 private fun MainScreen(onLogout: () -> Unit) {
+    AppUpdatePrompt()
     var selectedItem by remember { mutableStateOf(HomeTab) }
     val context = LocalContext.current
     val playerState = remember { MusicPlayerState(context) }
@@ -144,7 +145,7 @@ private fun MainScreen(onLogout: () -> Unit) {
         ) {
             when (selectedItem) {
                 HomeTab -> HomeScreen(playerState)
-                PlayListTab -> PlayListScreen(playerState)
+                PlayListTab -> PlaylistScreen(playerState)
                 UploadTab -> UploadScreen()
                 AccountTab -> ProfileScreen(onLogout)
             }

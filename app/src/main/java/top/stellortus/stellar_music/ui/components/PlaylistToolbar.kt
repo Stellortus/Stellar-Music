@@ -1,6 +1,10 @@
 package top.stellortus.stellar_music.ui.components
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -30,7 +34,6 @@ fun CreatePlaylistDialog(
                     StellarCheckbox(isPublic, onPublicChange, enabled = !submitting)
                     StellarText("公开歌单")
                 }
-                StellarText(if (isPublic) "其他用户可以查看此歌单" else "仅自己可见", tone = StellarTone.Secondary)
             }
         },
         confirmButton = {

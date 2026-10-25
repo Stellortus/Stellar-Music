@@ -8,7 +8,6 @@ import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
@@ -17,12 +16,17 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-import top.stellortus.stellar_music.data.AuthPreferences
-import top.stellortus.stellar_music.fromId
+import top.stellortus.stellar_music.trackFromId
 import top.stellortus.stellar_music.trackList
 import top.stellortus.stellar_music.utils.extensions.ensureSuccess
 import top.stellortus.stellar_music_common.dto.Track
 import java.io.File
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.request
+import io.ktor.client.request.url
+import io.ktor.http.HttpMethod
+import top.stellortus.stellar_music.trackSearchUrl
+import top.stellortus.stellar_music.utils.extensions.bodyOrThrow
 
 object NetworkService {
     val client: HttpClient = HttpClient(OkHttp) {
@@ -39,11 +43,8 @@ object NetworkService {
                 }
             )
         }
-
+        install(TokenAuth)
         defaultRequest {
-            AuthPreferences.current?.token?.let { token ->
-                header(HttpHeaders.Authorization, "Bearer $token")
-            }
             contentType(ContentType.Application.Json)
         }
     }
@@ -61,7 +62,7 @@ object NetworkService {
     }
 
     suspend fun get(id: Int): HttpResponse {
-        return client.get(fromId(id))
+        return client.get(trackFromId(id))
     }
 
     suspend fun getMusicList(start: Int = 0): List<Track> {
@@ -69,6 +70,9 @@ object NetworkService {
             parameter("start", start)
         }.ensureSuccess().body()
     }
+
+    suspend fun searchTracks(key: String): List<Track> =
+        client.request(trackSearchRequest(key)).bodyOrThrow()
     suspend fun getAllMusicList(maxTracks: Int = 500): List<Track> {
         val all = mutableListOf<Track>()
         var start = 0
@@ -80,4 +84,10 @@ object NetworkService {
         }
         return all.take(maxTracks)
     }
+}
+
+internal fun trackSearchRequest(key: String) = HttpRequestBuilder().apply {
+    method = HttpMethod.Get
+    url(trackSearchUrl())
+    parameter("key", key)
 }

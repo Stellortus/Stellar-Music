@@ -31,9 +31,6 @@ class StreamPlayer(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var progressJob: Job? = null
-
-    // 使用带 Bearer token 的数据源，否则播放请求会被服务端以 401 拒绝。
-    // StreamCache 在播放的同时把数据写入磁盘，之后再次播放同一首歌不再走网络。
     private val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setMediaSourceFactory(DefaultMediaSourceFactory(StreamCache.dataSourceFactory(appContext)))
         .build()
@@ -61,7 +58,7 @@ class StreamPlayer(
         }
 
     fun play(id: Int) {
-        player.setMediaItem(MediaItem.fromUri(fromId(id)))
+        player.setMediaItem(MediaItem.fromUri(trackFromId(id)))
         player.prepare()
         player.play()
     }
