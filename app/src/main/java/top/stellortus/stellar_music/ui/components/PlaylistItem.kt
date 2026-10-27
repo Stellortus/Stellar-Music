@@ -2,7 +2,7 @@ package top.stellortus.stellar_music.ui.components
 
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,31 +28,44 @@ fun PlaylistItem(
     onOpen: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onPlay: () -> Unit,
     onToggleVisibility: (() -> Unit)? = null,
     actionsEnabled: Boolean = true,
-    showActions: Boolean = true
+    showActions: Boolean = true,
+    isCurrent: Boolean = false,
+    isPlaying: Boolean = false,
+    controlFeedbackVersion: Long = 0L,
 ) {
     val updatedAt = remember(playlist.updatedAt) { formatDateTime(playlist.updatedAt) }
-    var menuExpanded by remember { mutableStateOf(false) }
+    var menuExpanded by remember(playlist.id) { mutableStateOf(false) }
+    val onLongClick: (() -> Unit)? = if (showActions && actionsEnabled) {
+        { menuExpanded = true }
+    } else null
     StellarCard( kind = StellarSurfaceKind.Card,
         modifier = Modifier.fillMaxWidth().padding(vertical = StellarTheme.spacing.gap)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)
-                .padding(horizontal = StellarTheme.spacing.section, vertical = StellarTheme.spacing.itemGap),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.itemGap)
-        ) {
-            CoverPlaceholder(CoverPlaceholderSize.Medium)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.small)) {
-                StellarText(playlist.name, role = StellarTextRole.ItemTitle,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                StellarText(if (playlist.public) "公开" else "私有", role = StellarTextRole.Caption, tone = StellarTone.Secondary)
-                StellarText("${playlist.trackCount} 首歌曲 · 更新于 $updatedAt",
-                    tone = StellarTone.Secondary,
-                    role = StellarTextRole.Caption)
+        Box {
+            Row(
+                modifier = Modifier.fillMaxWidth().combinedClickable(
+                    interactionSource = null, indication = null,
+                    onClick = onOpen, onLongClick = onLongClick,
+                    onLongClickLabel = if (onLongClick != null) "歌单操作" else null)
+                    .padding(horizontal = StellarTheme.spacing.section, vertical = StellarTheme.spacing.itemGap),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.itemGap)
+            ) {
+                PlaylistPlayCover(playlist.name, onPlay, onLongClick = onLongClick,
+                    isCurrent = isCurrent, isPlaying = isPlaying,
+                    controlFeedbackVersion = controlFeedbackVersion)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.small)) {
+                    StellarText(playlist.name, role = StellarTextRole.ItemTitle,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    StellarText(if (playlist.public) "公开" else "私有", role = StellarTextRole.Caption, tone = StellarTone.Secondary)
+                    StellarText("${playlist.trackCount} 首歌曲 · 更新于 $updatedAt",
+                        tone = StellarTone.Secondary,
+                        role = StellarTextRole.Caption)
+                }
             }
-            if (showActions) Box {
-                StellarButton(kind = StellarButtonKind.Text, enabled = actionsEnabled, onClick = { menuExpanded = true }) { StellarText("更多") }
+            if (showActions) {
                 PlaylistActionsMenu(
                     expanded = menuExpanded && actionsEnabled, onDismiss = { menuExpanded = false },
                     onRename = onRename, onDelete = onDelete,
@@ -75,8 +88,8 @@ private fun PlaylistPreview() {
                     top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap))
             PlaylistToolbar({})
             Column(Modifier.padding(horizontal = StellarTheme.spacing.page)) {
-                PlaylistItem(Playlist(1, 1, "留给深夜的声音 · 一份很长的歌单名称", null, null, false, 0L, 0L, 12), {}, {}, {}, onToggleVisibility = {})
-                PlaylistItem(Playlist(2, 2, "公开歌单", null, null, true, 0L, 0L, 3), {}, {}, {}, actionsEnabled = false)
+                PlaylistItem(Playlist(1, 1, "留给深夜的声音 · 一份很长的歌单名称", null, null, false, 0L, 0L, 12), {}, {}, {}, {}, onToggleVisibility = {})
+                PlaylistItem(Playlist(2, 2, "公开歌单", null, null, true, 0L, 0L, 3), {}, {}, {}, {}, actionsEnabled = false)
             }
         }
     }

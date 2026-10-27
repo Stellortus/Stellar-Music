@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music.network
+package top.stellortus.stellar_music.utils.plugins
 
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.request.HttpRequestBuilder
@@ -15,7 +15,7 @@ fun HttpRequestBuilder.withoutAuth() {
 val TokenAuth = createClientPlugin("TokenAuth") {
     onRequest { request, _ ->
         if (request.attributes.getOrNull(SkipAuth) != true) {
-            AuthPreferences.current?.token?.let { token ->
+            AuthPreferences.token?.let { token ->
                 if (!request.headers.contains(HttpHeaders.Authorization)) {
                     request.headers.append(
                         HttpHeaders.Authorization,

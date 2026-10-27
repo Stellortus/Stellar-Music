@@ -1,7 +1,12 @@
 package top.stellortus.stellar_music.ui.components
 
 import android.content.res.Configuration
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -10,6 +15,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import top.stellortus.stellar_music.R
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
 import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music_common.dto.Playlist
 import top.stellortus.stellar_music_common.dto.Track
 
 @Preview(name = "Components Light", widthDp = 360, heightDp = 900)
@@ -87,8 +93,8 @@ private fun SearchResultsPreview() {
         Column(Modifier.fillMaxSize().padding(StellarTheme.spacing.page)) {
             StellarSearchField("留给深夜的声音", {}, onClick = {}, contentDescription = "返回歌单列表，编辑搜索内容")
             PlaylistItem(
-                top.stellortus.stellar_music_common.dto.Playlist(1, 1, "留给深夜的声音", null, null, true, 0L, 0L, 12),
-                {}, {}, {}, showActions = false)
+                Playlist(1, 1, "留给深夜的声音", null, null, true, 0L, 0L, 12),
+                {}, {}, {}, {}, showActions = false)
         }
     }
 }

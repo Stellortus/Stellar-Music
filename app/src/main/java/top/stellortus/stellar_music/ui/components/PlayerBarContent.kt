@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +30,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -35,6 +40,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
 import top.stellortus.stellar_music.R
 import top.stellortus.stellar_music_common.dto.Track
@@ -49,8 +55,12 @@ internal fun PlayerBarContent(
     onTogglePause: () -> Unit,
     onSeekPreview: (Float) -> Unit,
     onSeekFinished: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenQueue: () -> Unit = {},
+    cardAnchorModifier: Modifier = Modifier,
 ) {
+    val openQueue = rememberUpdatedState(onOpenQueue)
+    val swipeThreshold = with(LocalDensity.current) { 48.dp.toPx() }
     val coverRotation = remember(track.id) { Animatable(0f) }
     val rotationDuration = StellarTheme.motion.coverRotationDurationMillis
     LaunchedEffect(isPlaying, track.id, rotationDuration) {
@@ -69,7 +79,7 @@ internal fun PlayerBarContent(
             .padding(
                 horizontal = StellarTheme.spacing.section,
                 vertical = StellarTheme.spacing.gap
-            ),
+            ).then(cardAnchorModifier),
         kind = StellarSurfaceKind.Player
     ) {
         Column(
@@ -104,7 +114,29 @@ internal fun PlayerBarContent(
                             .clip(StellarTheme.shapes.avatar)
                     )
                 }
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f)
+                    .semantics {
+                        customActions = listOf(CustomAccessibilityAction("打开当前播放列表") {
+                            openQueue.value()
+                            true
+                        })
+                    }
+                    .pointerInput(swipeThreshold) {
+                        var upwardDrag = 0f
+                        var opened = false
+                        detectVerticalDragGestures(
+                            onDragStart = { upwardDrag = 0f; opened = false },
+                            onVerticalDrag = { change, amount ->
+                                change.consume()
+                                upwardDrag -= amount
+                                if (!opened && upwardDrag >= swipeThreshold) {
+                                    opened = true
+                                    openQueue.value()
+                                }
+                            },
+                        )
+                    }
+                ) {
                     PlayerTrackTitle(track.title, track.id)
                     StellarText(
                         track.artists.joinToString(" / ").ifBlank { "未知歌手" },

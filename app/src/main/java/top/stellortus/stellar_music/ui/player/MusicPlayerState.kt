@@ -4,10 +4,16 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.media3.common.util.UnstableApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import top.stellortus.stellar_music.StreamPlayer
+import top.stellortus.stellar_music.network.PlaylistApi
 import top.stellortus.stellar_music_common.dto.Track
 import kotlin.math.abs
 
@@ -15,9 +21,27 @@ import kotlin.math.abs
 @UnstableApi
 class MusicPlayerState(context: Context) {
 
-    private val player = StreamPlayer(
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val playlistPlayback: PlaylistPlaybackController = PlaylistPlaybackController(
+        scope = scope,
+        loadTracks = { PlaylistApi.getPlaylist(it).tracks },
+        onPlay = ::startTrack,
+        onError = { playbackError = it },
+        onQueueChanged = { tracks, index ->
+            queueTracks = tracks
+            currentQueueIndex = index
+        },
+        onSourcePlaylistChanged = {
+            currentPlaylistId = it
+            if (it != null) playlistControlFeedbackVersion++
+        },
+        onTogglePause = ::togglePause,
+    )
+
+    private val player: StreamPlayer = StreamPlayer(
         context = context.applicationContext,
         onPlayingChanged = { isPlaying = it },
+        onPlaybackRequestedChanged = { isPlaybackRequested = it },
         onProgressChanged = { position, duration ->
             positionMs = position.toFloat()
             durationMs = duration.toFloat()
@@ -25,18 +49,36 @@ class MusicPlayerState(context: Context) {
                 if (abs(position - pending) < 1000f) dragPositionMs = null
             }
         },
-        onError = { playbackError = it },
+        onError = { playlistPlayback.stopLoop(); playbackError = it },
         onCompleted = {
             isPlaying = false
             positionMs = 0f
             dragPositionMs = null
+            playlistPlayback.onCompleted()
         },
     )
 
     var currentTrack: Track? by mutableStateOf(null)
         private set
 
+    var currentPlaylistId: Int? by mutableStateOf(null)
+        private set
+
+    /** User playback actions refresh cover feedback; automatic track changes do not. */
+    var playlistControlFeedbackVersion: Long by mutableLongStateOf(0L)
+        private set
+
+    var queueTracks: List<Track> by mutableStateOf(emptyList())
+        private set
+
+    var currentQueueIndex: Int by mutableStateOf(-1)
+        private set
+
     var isPlaying: Boolean by mutableStateOf(false)
+        private set
+
+    /** Remains true during buffering and playlist transitions, until paused or playback fails. */
+    var isPlaybackRequested: Boolean by mutableStateOf(false)
         private set
 
     var positionMs: Float by mutableFloatStateOf(0f)
@@ -53,7 +95,19 @@ class MusicPlayerState(context: Context) {
         private set
 
     /** 点击列表里的歌曲：重置进度并开始播放。 */
-    fun play(track: Track) {
+    fun play(track: Track) = playlistPlayback.play(track)
+
+    fun playPlaylist(playlistId: Int) = playlistPlayback.playPlaylist(playlistId)
+
+    fun playPlaylist(tracks: List<Track>, startIndex: Int = 0, sourcePlaylistId: Int? = null) =
+        playlistPlayback.playPlaylist(tracks, startIndex, sourcePlaylistId)
+
+    fun togglePlaylist(playlistId: Int, tracks: List<Track>? = null) =
+        playlistPlayback.togglePlaylist(playlistId, tracks)
+
+    fun playQueueIndex(index: Int) = playlistPlayback.playQueueIndex(index)
+
+    private fun startTrack(track: Track) {
         currentTrack = track
         positionMs = 0f
         durationMs = 0f
@@ -62,7 +116,10 @@ class MusicPlayerState(context: Context) {
         player.play(track.id)
     }
 
-    fun togglePause() = player.togglePause()
+    fun togglePause() {
+        player.togglePause()
+        if (currentPlaylistId != null) playlistControlFeedbackVersion++
+    }
 
     fun clearPlaybackError() { playbackError = null }
 
@@ -75,5 +132,9 @@ class MusicPlayerState(context: Context) {
         dragPositionMs?.let { player.seekTo(it.toLong()) }
     }
 
-    fun release() = player.release()
+    fun release() {
+        playlistPlayback.cancelRequest()
+        scope.cancel()
+        player.release()
+    }
 }

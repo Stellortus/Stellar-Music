@@ -22,7 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import top.stellortus.stellar_music.ui.ToastManager
 import kotlinx.coroutines.launch
-import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
 
@@ -30,7 +30,7 @@ import top.stellortus.stellar_music.utils.extensions.toUserMessage
 fun ProfileScreen(onLogout: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val prefs = AuthPreferences.getInstance(context)
+    val prefs = LocalAuthPreferences.current
     val username = prefs.username.orEmpty()
     var loading by remember { mutableStateOf(false) }
 

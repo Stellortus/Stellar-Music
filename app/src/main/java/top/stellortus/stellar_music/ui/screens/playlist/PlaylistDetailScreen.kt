@@ -92,7 +92,12 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
 
         detail?.let { current ->
             Row(horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.section), verticalAlignment = Alignment.CenterVertically) {
-                CoverPlaceholder(CoverPlaceholderSize.Large)
+                PlaylistPlayCover(current.name,
+                    onPlay = { player.togglePlaylist(playlistId, current.tracks.distinctBy { it.id }) },
+                    isCurrent = player.currentPlaylistId == playlistId,
+                    isPlaying = player.isPlaybackRequested,
+                    controlFeedbackVersion = player.playlistControlFeedbackVersion,
+                    size = CoverPlaceholderSize.Large, enabled = !isLoading && errorMessage == null)
                 StellarText(current.name, role = StellarTextRole.Title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             val updatedAt = remember(current.updatedAt) { formatDateTime(current.updatedAt) }
@@ -139,7 +144,7 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
                     itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                         TrackItem(
                             track = track,
-                            onClick = { player.play(track) },
+                            onClick = { player.playPlaylist(tracks, index, sourcePlaylistId = playlistId) },
                             onLongClick = { selectedTrack = track },
                             isCurrent = player.currentTrack?.id == track.id,
                             showDivider = index < tracks.lastIndex

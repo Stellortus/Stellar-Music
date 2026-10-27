@@ -57,6 +57,10 @@ fun PlaylistScreen(player: MusicPlayerState) {
         ) {
             PlaylistListScreen(
                 pageState = playlistPageState, listState = playlistListState,
+                onPlayPlaylist = { player.togglePlaylist(it) },
+                currentPlaylistId = player.currentPlaylistId,
+                isPlaying = player.isPlaybackRequested,
+                controlFeedbackVersion = player.playlistControlFeedbackVersion,
                 onOpenPlaylist = { id ->
                     playlistPageState.loaded = false
                     navController.navigate("$ROUTE_PLAYLISTS/$id")
@@ -79,6 +83,10 @@ fun PlaylistScreen(player: MusicPlayerState) {
             sizeTransform = { null }
         ) {
             PlaylistSearchScreen(searchState, searchListState,
+                onPlayPlaylist = { player.togglePlaylist(it) },
+                currentPlaylistId = player.currentPlaylistId,
+                isPlaying = player.isPlaybackRequested,
+                controlFeedbackVersion = player.playlistControlFeedbackVersion,
                 onBack = { searchState.cancel(); navController.popBackStack() },
                 onOpenPlaylist = { id -> navController.navigate("$ROUTE_PLAYLISTS/$id") })
         }

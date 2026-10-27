@@ -8,7 +8,7 @@
 
    API 30 及以下由 allowBackup="false" 完整覆盖，无需 legacy 规则。
 
-   文件路径依据 AuthPreferences.kt 中 getSharedPreferences("auth_prefs", ...)，
+   文件路径依据 AuthPreferences.kt 中 Preferences("auth_prefs")，由基类调用 getSharedPreferences，
    实际落盘文件为 shared_prefs/auth_prefs.xml。
 
    参见 https://developer.android.com/about/versions/12/behavior-changes-12#backup-restore

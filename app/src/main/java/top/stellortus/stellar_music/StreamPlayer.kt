@@ -25,6 +25,7 @@ class StreamPlayer(
     private val onProgressChanged: (positionMs: Long, durationMs: Long) -> Unit,
     private val onError: (String) -> Unit,
     private val onCompleted: () -> Unit,
+    private val onPlaybackRequestedChanged: (Boolean) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
 
@@ -36,6 +37,10 @@ class StreamPlayer(
         .build()
         .apply {
             addListener(object : Player.Listener {
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    onPlaybackRequestedChanged(playWhenReady)
+                }
+
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     onPlayingChanged(isPlaying)
                     if (isPlaying) startProgressLoop() else stopProgressLoop()
@@ -51,6 +56,8 @@ class StreamPlayer(
 
                 override fun onPlayerError(error: PlaybackException) {
                     stopProgressLoop()
+                    this@StreamPlayer.player.pause()
+                    onPlaybackRequestedChanged(false)
                     onPlayingChanged(false)
                     onError("播放失败：${error.errorCodeName}")
                 }
@@ -64,7 +71,12 @@ class StreamPlayer(
     }
 
     fun togglePause() {
-        if (player.isPlaying) player.pause() else player.play()
+        if (player.playWhenReady) {
+            player.pause()
+        } else {
+            if (player.playerError != null) player.prepare()
+            player.play()
+        }
     }
 
     fun seekTo(positionMs: Long) {

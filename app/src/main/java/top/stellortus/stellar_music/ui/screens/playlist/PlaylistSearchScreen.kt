@@ -77,7 +77,11 @@ fun PlaylistSearchScreen(
     state: PlaylistSearchState,
     listState: LazyListState,
     onBack: () -> Unit,
-    onOpenPlaylist: (Int) -> Unit
+    onOpenPlaylist: (Int) -> Unit,
+    onPlayPlaylist: (Int) -> Unit,
+    currentPlaylistId: Int? = null,
+    isPlaying: Boolean = false,
+    controlFeedbackVersion: Long = 0L,
 ) {
     val context = LocalContext.current
     val submit: () -> Unit = {
@@ -100,6 +104,9 @@ fun PlaylistSearchScreen(
                     contentPadding = PaddingValues(top = StellarTheme.spacing.itemGap)) {
                     items(state.results, key = { it.id }) { playlist ->
                         PlaylistItem(playlist, onOpen = { onOpenPlaylist(playlist.id) },
+                            onPlay = { onPlayPlaylist(playlist.id) },
+                            isCurrent = currentPlaylistId == playlist.id, isPlaying = isPlaying,
+                            controlFeedbackVersion = controlFeedbackVersion,
                             onRename = {}, onDelete = {}, showActions = false)
                     }
                 }

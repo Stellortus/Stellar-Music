@@ -21,7 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
-import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.PlaylistApi
 import top.stellortus.stellar_music.ui.ToastManager
 import top.stellortus.stellar_music.ui.components.CreatePlaylistDialog
@@ -55,10 +55,14 @@ fun PlaylistListScreen(
     pageState: PlaylistListState,
     listState: LazyListState,
     onOpenPlaylist: (Int) -> Unit,
-    onSearch: (String) -> Unit
+    onPlayPlaylist: (Int) -> Unit,
+    onSearch: (String) -> Unit,
+    currentPlaylistId: Int? = null,
+    isPlaying: Boolean = false,
+    controlFeedbackVersion: Long = 0L,
 ) {
     val context = LocalContext.current
-    val userId = AuthPreferences.getInstance(context).userId
+    val userId = LocalAuthPreferences.current.userId
     val scope = rememberCoroutineScope()
 
     var playlists by pageState.playlists
@@ -133,6 +137,10 @@ fun PlaylistListScreen(
                         PlaylistItem(
                             playlist = playlist,
                             onOpen = { onOpenPlaylist(playlist.id) },
+                            onPlay = { onPlayPlaylist(playlist.id) },
+                            isCurrent = currentPlaylistId == playlist.id,
+                            isPlaying = isPlaying,
+                            controlFeedbackVersion = controlFeedbackVersion,
                             onRename = {
                                 renameTarget = playlist
                                 renameText = playlist.name

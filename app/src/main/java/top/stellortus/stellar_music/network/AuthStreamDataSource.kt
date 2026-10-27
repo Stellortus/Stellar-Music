@@ -7,7 +7,7 @@ import top.stellortus.stellar_music.data.AuthPreferences
 object AuthStreamDataSource {
     private val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
-            val token = AuthPreferences.current?.token
+            val token = AuthPreferences.token
             val request = if (token.isNullOrEmpty()) {
                 chain.request()
             } else {

@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.ApiException
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.ui.BottomTab.AccountTab
@@ -37,6 +40,7 @@ import top.stellortus.stellar_music.ui.BottomTab.PlayListTab
 import top.stellortus.stellar_music.ui.BottomTab.UploadTab
 import top.stellortus.stellar_music.ui.player.MusicPlayerState
 import top.stellortus.stellar_music.ui.player.PlayerBar
+import top.stellortus.stellar_music.ui.player.PlaybackQueueHost
 import top.stellortus.stellar_music.ui.screens.HomeScreen
 import top.stellortus.stellar_music.ui.screens.PlaylistScreen
 import top.stellortus.stellar_music.ui.screens.UploadScreen
@@ -47,11 +51,13 @@ import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AuthPreferences.getInstance(applicationContext)
+        AuthPreferences.init(applicationContext)
         enableEdgeToEdge()
         setContent {
-            StellarMusicTheme {
-                MusicApp()
+            CompositionLocalProvider(LocalAuthPreferences provides AuthPreferences) {
+                StellarMusicTheme {
+                    MusicApp()
+                }
             }
         }
     }
@@ -67,12 +73,12 @@ private enum class AuthState {
 @Composable
 private fun MusicApp() {
     val context = LocalContext.current
+    val prefs = LocalAuthPreferences.current
     var authState by remember { mutableStateOf(AuthState.Loading) }
     var verifyAttempt by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(verifyAttempt) {
         authState = AuthState.Loading
-        val prefs = AuthPreferences.getInstance(context)
         if (!prefs.hasToken) {
             authState = AuthState.Unauthenticated
             return@LaunchedEffect
@@ -117,6 +123,7 @@ private fun MainScreen(onLogout: () -> Unit) {
     var selectedItem by remember { mutableStateOf(HomeTab) }
     val context = LocalContext.current
     val playerState = remember { MusicPlayerState(context) }
+    var queueVisible by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(playerState.playbackError) {
         playerState.playbackError?.let {
             top.stellortus.stellar_music.ui.ToastManager.makeText(context, it)
@@ -127,27 +134,36 @@ private fun MainScreen(onLogout: () -> Unit) {
         onDispose { playerState.release() }
     }
 
-    StellarScaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            Column {
-                PlayerBar(playerState)
-                StellarNavigationBar(selectedItem) { selectedItem = it }
+    PlaybackQueueHost(
+        expanded = queueVisible,
+        tracks = playerState.queueTracks,
+        currentIndex = playerState.currentQueueIndex,
+        onSelect = playerState::playQueueIndex,
+        onDismiss = { queueVisible = false },
+    ) { playerAnchorModifier ->
+        StellarScaffold(
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = {
+                Column {
+                    PlayerBar(playerState, onOpenQueue = { queueVisible = true },
+                        queueAnchorModifier = playerAnchorModifier)
+                    StellarNavigationBar(selectedItem) { queueVisible = false; selectedItem = it }
+                }
             }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            when (selectedItem) {
-                HomeTab -> HomeScreen(playerState)
-                PlayListTab -> PlaylistScreen(playerState)
-                UploadTab -> UploadScreen()
-                AccountTab -> ProfileScreen(onLogout)
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                when (selectedItem) {
+                    HomeTab -> HomeScreen(playerState)
+                    PlayListTab -> PlaylistScreen(playerState)
+                    UploadTab -> UploadScreen()
+                    AccountTab -> ProfileScreen(onLogout)
+                }
             }
         }
     }

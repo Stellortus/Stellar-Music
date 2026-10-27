@@ -3,7 +3,6 @@ package top.stellortus.stellar_music.ui.screens.account
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.components.*
 
-import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.animation.EnterTransition
@@ -34,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music_common.dto.AuthResponse
 import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
 
@@ -106,6 +106,7 @@ private fun LoginScreen(
     onNavigateToRegister: () -> Unit,
 ) {
     val context = LocalContext.current
+    val preferences = LocalAuthPreferences.current
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -144,7 +145,7 @@ private fun LoginScreen(
 
                             runCatching { AuthApi.login(username.trim(), password) }
                                 .onSuccess {
-                                    saveAuth(context, it)
+                                    saveAuth(preferences, it)
                                     onLoggedIn()
                                 }
                                 .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
@@ -170,6 +171,7 @@ private fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
 ) {
     val context = LocalContext.current
+    val preferences = LocalAuthPreferences.current
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -221,7 +223,7 @@ private fun RegisterScreen(
 
                             runCatching { AuthApi.register(username.trim(), password) }
                                 .onSuccess {
-                                    saveAuth(context, it)
+                                    saveAuth(preferences, it)
                                     onLoggedIn()
                                 }
                                 .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
@@ -242,8 +244,8 @@ private fun RegisterScreen(
 }
 
 /** 登录/注册成功后保存登录态，并由上层回调跳转主页。 */
-private fun saveAuth(context: Context, auth: AuthResponse) {
-    AuthPreferences.getInstance(context).apply {
+private fun saveAuth(preferences: AuthPreferences, auth: AuthResponse) {
+    preferences.apply {
         token = auth.token
         userId = auth.user.id
         username = auth.user.username

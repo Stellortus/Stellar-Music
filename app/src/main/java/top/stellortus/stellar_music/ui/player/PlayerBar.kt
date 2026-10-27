@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music.ui.player
+﻿package top.stellortus.stellar_music.ui.player
 
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
@@ -8,8 +8,14 @@ import top.stellortus.stellar_music.ui.components.PlayerBarContent
 
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerBar(state: MusicPlayerState, modifier: Modifier = Modifier) {
+fun PlayerBar(
+    state: MusicPlayerState,
+    modifier: Modifier = Modifier,
+    onOpenQueue: () -> Unit = {},
+    queueAnchorModifier: Modifier = Modifier,
+) {
     val track = state.currentTrack ?: return
     PlayerBarContent(track, state.isPlaying, state.dragPositionMs ?: state.positionMs, state.durationMs,
-        state::togglePause, state::onSeekPreview, state::onSeekFinished, modifier)
+        state::togglePause, state::onSeekPreview, state::onSeekFinished, modifier,
+        onOpenQueue = onOpenQueue, cardAnchorModifier = queueAnchorModifier)
 }

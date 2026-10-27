@@ -6,6 +6,8 @@ fun trackFromId(id: Int) = "https://$Domain/track/$id"
 
 fun trackList() = "https://$Domain/track_list"
 
+fun upload(fileName: String) = "https://$Domain/track/$fileName"
+
 fun trackSearchUrl() = "${trackList()}/search"
 
 fun authRegisterUrl() = "https://$Domain/auth/register"

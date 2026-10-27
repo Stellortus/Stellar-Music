@@ -5,6 +5,7 @@ import io.ktor.http.Url
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
 import top.stellortus.stellar_music.playlistSearchUrl
@@ -36,9 +37,14 @@ class PlaylistSearchRequestTest {
     @Test
     fun creationAlwaysSendsChosenVisibility() {
         for (isPublic in listOf(false, true)) {
-            val body = playlistCreateBody(CreatePlaylistRequest(name = "星河", public = isPublic))
+            val body = networkJson.encodeToJsonElement(
+                CreatePlaylistRequest.serializer(),
+                CreatePlaylistRequest(name = "星河", public = isPublic),
+            ).jsonObject
             assertEquals(JsonPrimitive(isPublic), body["public"])
             assertEquals(JsonPrimitive("星河"), body["name"])
+            assertFalse(body.containsKey("description"))
+            assertFalse(body.containsKey("coverPath"))
         }
     }
 }

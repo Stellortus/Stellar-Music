@@ -5,6 +5,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.plugins.expectSuccess
 import top.stellortus.stellar_music.latestVersionNameUrl
 import top.stellortus.stellar_music.network.NetworkService.client
+import top.stellortus.stellar_music.utils.plugins.withoutAuth
 import top.stellortus.stellar_music.versionCode
 
 object AppUpdateApi {
