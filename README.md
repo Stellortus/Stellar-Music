@@ -12,12 +12,20 @@
 - **Asynchronous Networking:** Uses **Ktor Client** for efficient, non-blocking API requests.
 - **Clean Architecture:** Separation of concerns between UI, Data, and Network layers (MVVM).
 - **State Management:** Reactive UI states using Kotlin Flow and Compose State.
+- **Offline Metadata:** Previously loaded songs, playlists, and playlist details remain available after restarting without a network connection.
 
 ## 🛠 Tech Stack
 
 - **Language:** [Kotlin](https://kotlinlang.org/)
 - **UI Framework:** [Jetpack Compose](https://developer.android.com/jetpack/compose)
 - **Networking:** [Ktor Client](https://ktor.io/docs/client.html)
+- **Local Storage:** Room, with separate `tracks.db` and `playlists.db` databases.
+
+## Local data flow
+
+Compose calls `TrackManager.getMusicList`, `PlaylistManager.listPlaylists`, and `PlaylistManager.getPlaylist` using ordinary suspend functions. A cache hit returns the saved snapshot immediately and starts one background synchronization. A cache miss waits for the network result to be saved, then reads the database again before returning. Screens do not observe cache changes; synchronized data appears on the next call. Song pages are cached separately by their server offset, and concurrent synchronization of the same key is shared.
+
+Signing out or invalidating a session cancels cache requests and clears both databases. Audio uses the existing stream cache; metadata caching does not download audio files. Search continues to use the network.
 
 ## ⚙️ Configuration (Crucial Step)
 

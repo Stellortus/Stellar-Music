@@ -1,15 +1,13 @@
 package top.stellortus.stellar_music.ui.components
 
-import top.stellortus.stellar_music.ui.theme.StellarTheme
-
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,13 +27,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -43,6 +41,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.isActive
 import top.stellortus.stellar_music.R
+import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholder
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholderSize
+import top.stellortus.stellar_music.ui.widgets.StellarCard
+import top.stellortus.stellar_music.ui.widgets.StellarIcon
+import top.stellortus.stellar_music.ui.widgets.StellarIconButton
+import top.stellortus.stellar_music.ui.widgets.StellarSurfaceKind
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarTone
 import top.stellortus.stellar_music_common.dto.Track
 import kotlin.math.roundToInt
 
@@ -79,7 +87,8 @@ internal fun PlayerBarContent(
             .padding(
                 horizontal = StellarTheme.spacing.section,
                 vertical = StellarTheme.spacing.gap
-            ).then(cardAnchorModifier),
+            )
+            .then(cardAnchorModifier),
         kind = StellarSurfaceKind.Player
     ) {
         Column(
@@ -110,32 +119,35 @@ internal fun PlayerBarContent(
                 ) {
                     CoverPlaceholder(
                         CoverPlaceholderSize.Small,
-                        Modifier.graphicsLayer { rotationZ = coverRotation.value }
+                        Modifier
+                            .graphicsLayer { rotationZ = coverRotation.value }
                             .clip(StellarTheme.shapes.avatar)
                     )
                 }
-                Column(Modifier.weight(1f)
-                    .semantics {
-                        customActions = listOf(CustomAccessibilityAction("打开当前播放列表") {
-                            openQueue.value()
-                            true
-                        })
-                    }
-                    .pointerInput(swipeThreshold) {
-                        var upwardDrag = 0f
-                        var opened = false
-                        detectVerticalDragGestures(
-                            onDragStart = { upwardDrag = 0f; opened = false },
-                            onVerticalDrag = { change, amount ->
-                                change.consume()
-                                upwardDrag -= amount
-                                if (!opened && upwardDrag >= swipeThreshold) {
-                                    opened = true
-                                    openQueue.value()
-                                }
-                            },
-                        )
-                    }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .semantics {
+                            customActions = listOf(CustomAccessibilityAction("打开当前播放列表") {
+                                openQueue.value()
+                                true
+                            })
+                        }
+                        .pointerInput(swipeThreshold) {
+                            var upwardDrag = 0f
+                            var opened = false
+                            detectVerticalDragGestures(
+                                onDragStart = { upwardDrag = 0f; opened = false },
+                                onVerticalDrag = { change, amount ->
+                                    change.consume()
+                                    upwardDrag -= amount
+                                    if (!opened && upwardDrag >= swipeThreshold) {
+                                        opened = true
+                                        openQueue.value()
+                                    }
+                                },
+                            )
+                        }
                 ) {
                     PlayerTrackTitle(track.title, track.id)
                     StellarText(
@@ -261,34 +273,4 @@ private fun formatTime(ms: Float): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%02d:%02d".format(minutes, seconds)
-}
-
-@androidx.compose.ui.tooling.preview.Preview(name = "Player Light", widthDp = 360)
-@androidx.compose.ui.tooling.preview.Preview(
-    name = "Player Dark",
-    widthDp = 360,
-    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES
-)
-@androidx.compose.ui.tooling.preview.Preview(
-    name = "Player Large Text",
-    widthDp = 320,
-    fontScale = 1.5f
-)
-@Composable
-private fun PlayerPreview() {
-    top.stellortus.stellar_music.ui.theme.StellarMusicTheme {
-        PlayerBarContent(
-            Track(
-                1,
-                "星河漫游 · 一首很长的歌名",
-                listOf("Stellar"),
-                "music.mp3",
-                "Listener",
-                "",
-                "",
-                0L
-            ),
-            true, 45000f, 210000f, {}, {}, {}
-        )
-    }
 }

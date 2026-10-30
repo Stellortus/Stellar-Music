@@ -1,5 +1,10 @@
 package top.stellortus.stellar_music.ui.screens.playlist
 
+import top.stellortus.stellar_music.ui.widgets.StellarEmptyState
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarRetryAction
+import top.stellortus.stellar_music.ui.widgets.StellarSearchField
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -8,13 +13,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.network.PlaylistApi
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.ui.components.*
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.Playlist
@@ -83,9 +87,8 @@ fun PlaylistSearchScreen(
     isPlaying: Boolean = false,
     controlFeedbackVersion: Long = 0L,
 ) {
-    val context = LocalContext.current
     val submit: () -> Unit = {
-        state.submit { ToastManager.makeText(context, it.toPlaylistMessage()) }
+        state.submit { ToastManager.makeText(it.toPlaylistMessage()) }
     }
     LaunchedEffect(state) {
         if (!state.submitted) submit()

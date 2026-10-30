@@ -1,7 +1,14 @@
 package top.stellortus.stellar_music.ui.screens.account
 
+import top.stellortus.stellar_music.ui.widgets.FormCard
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextField
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarTone
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
-import top.stellortus.stellar_music.ui.components.*
 
 import android.content.pm.PackageManager
 import android.os.Build
@@ -26,13 +33,16 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.utils.ToastManager
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import top.stellortus.stellar_music_common.dto.AuthResponse
 import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.db.manager.TrackManager
+import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
@@ -105,7 +115,6 @@ private fun LoginScreen(
     onLoggedIn: () -> Unit,
     onNavigateToRegister: () -> Unit,
 ) {
-    val context = LocalContext.current
     val preferences = LocalAuthPreferences.current
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf("") }
@@ -139,16 +148,18 @@ private fun LoginScreen(
             StellarButton(kind = StellarButtonKind.Primary, loading = loading,
                 onClick = {
                     when {
-                        username.isBlank() || password.isBlank() -> ToastManager.makeText(context, "请输入用户名和密码")
+                        username.isBlank() || password.isBlank() -> ToastManager.makeText("请输入用户名和密码")
                         else -> scope.launch {
                             loading = true
 
-                            runCatching { AuthApi.login(username.trim(), password) }
+                            runCatching { saveAuth(preferences, AuthApi.login(username.trim(), password)) }
                                 .onSuccess {
-                                    saveAuth(preferences, it)
                                     onLoggedIn()
                                 }
-                                .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                                .onFailure { e ->
+                                    if (e is CancellationException) throw e
+                                    ToastManager.makeText(e.toUserMessage())
+                                }
                             loading = false
                         }
                     }
@@ -170,7 +181,6 @@ private fun RegisterScreen(
     onLoggedIn: () -> Unit,
     onNavigateToLogin: () -> Unit,
 ) {
-    val context = LocalContext.current
     val preferences = LocalAuthPreferences.current
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf("") }
@@ -215,18 +225,20 @@ private fun RegisterScreen(
             StellarButton(kind = StellarButtonKind.Primary, loading = loading,
                 onClick = {
                     when {
-                        username.isBlank() -> ToastManager.makeText(context, "请输入用户名")
-                        password.isBlank() -> ToastManager.makeText(context, "请输入密码")
-                        confirmPassword != password -> ToastManager.makeText(context, "两次输入的密码不一致")
+                        username.isBlank() -> ToastManager.makeText("请输入用户名")
+                        password.isBlank() -> ToastManager.makeText("请输入密码")
+                        confirmPassword != password -> ToastManager.makeText("两次输入的密码不一致")
                         else -> scope.launch {
                             loading = true
 
-                            runCatching { AuthApi.register(username.trim(), password) }
+                            runCatching { saveAuth(preferences, AuthApi.register(username.trim(), password)) }
                                 .onSuccess {
-                                    saveAuth(preferences, it)
                                     onLoggedIn()
                                 }
-                                .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                                .onFailure { e ->
+                                    if (e is CancellationException) throw e
+                                    ToastManager.makeText(e.toUserMessage())
+                                }
                             loading = false
                         }
                     }
@@ -244,10 +256,13 @@ private fun RegisterScreen(
 }
 
 /** 登录/注册成功后保存登录态，并由上层回调跳转主页。 */
-private fun saveAuth(preferences: AuthPreferences, auth: AuthResponse) {
+private suspend fun saveAuth(preferences: AuthPreferences, auth: AuthResponse) {
+    preferences.clearSession()
     preferences.apply {
         token = auth.token
         userId = auth.user.id
         username = auth.user.username
     }
+    TrackManager.startSession()
+    PlaylistManager.startSession()
 }

@@ -62,7 +62,6 @@ fun PlaylistScreen(player: MusicPlayerState) {
                 isPlaying = player.isPlaybackRequested,
                 controlFeedbackVersion = player.playlistControlFeedbackVersion,
                 onOpenPlaylist = { id ->
-                    playlistPageState.loaded = false
                     navController.navigate("$ROUTE_PLAYLISTS/$id")
                 },
                 onSearch = { key ->

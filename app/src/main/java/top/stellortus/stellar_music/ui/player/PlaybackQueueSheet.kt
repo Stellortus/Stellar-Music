@@ -26,8 +26,8 @@ import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import top.stellortus.stellar_music.ui.components.StellarText
-import top.stellortus.stellar_music.ui.components.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
 import top.stellortus.stellar_music.ui.components.TrackItem
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.Track

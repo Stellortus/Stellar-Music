@@ -1,5 +1,13 @@
 package top.stellortus.stellar_music.ui.screens.playlist
 
+import top.stellortus.stellar_music.ui.widgets.StellarAlertDialog
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarTone
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.components.*
 
@@ -19,11 +27,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
-import top.stellortus.stellar_music.network.PlaylistApi
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.db.manager.PlaylistManager
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music_common.dto.Playlist
 import top.stellortus.stellar_music_common.dto.Track
 
@@ -32,7 +39,6 @@ import top.stellortus.stellar_music_common.dto.Track
  */
 @Composable
 fun AddToPlaylistDialog(track: Track, onDismiss: () -> Unit) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var reloadTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -44,9 +50,9 @@ fun AddToPlaylistDialog(track: Track, onDismiss: () -> Unit) {
     LaunchedEffect(reloadTick) {
         isLoading = true
         errorMessage = null
-        runCatching { PlaylistApi.listPlaylists() }
+        runCatching { PlaylistManager.listPlaylists() }
             .onSuccess { playlists = it }
-            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(context, it.toPlaylistMessage()) }
+            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
         isLoading = false
     }
 
@@ -87,18 +93,16 @@ fun AddToPlaylistDialog(track: Track, onDismiss: () -> Unit) {
                                 scope.launch {
                                     submitting = true
                                     runCatching {
-                                        PlaylistApi.addTracks(playlist.id, listOf(track.id))
+                                        PlaylistManager.addTracks(playlist.id, listOf(track.id))
                                     }
                                         .onSuccess {
                                             onDismiss()
                                             ToastManager.makeText(
-                                                context,
                                                 "已添加到「${playlist.name}」"
                                             )
                                         }
                                         .onFailure {
                                             ToastManager.makeText(
-                                                context,
                                                 it.toPlaylistMessage()
                                             )
                                         }

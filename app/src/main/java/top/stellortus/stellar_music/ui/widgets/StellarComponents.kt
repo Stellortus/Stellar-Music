@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music.ui.components
+package top.stellortus.stellar_music.ui.widgets
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -48,18 +48,5 @@ fun FormCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
     StellarCard(modifier = modifier, kind = StellarSurfaceKind.Card) {
         Column(Modifier.fillMaxWidth().padding(StellarTheme.spacing.page),
             verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.section), content = content)
-    }
-}
-
-@Composable
-fun ProfileIdentity(username: String, userId: Int?) {
-    FormCard {
-        StellarCard( kind = StellarSurfaceKind.Avatar) {
-            Box(Modifier.size(StellarTheme.sizes.avatarSize), contentAlignment = Alignment.Center) {
-                StellarText(username.take(1).uppercase().ifBlank { "♪" }, role = StellarTextRole.Avatar)
-            }
-        }
-        StellarText(username.ifBlank { "音乐爱好者" }, role = StellarTextRole.Title)
-        userId?.let { StellarText("账号 ID：$it", role = StellarTextRole.BodySmall, tone = StellarTone.Secondary) }
     }
 }

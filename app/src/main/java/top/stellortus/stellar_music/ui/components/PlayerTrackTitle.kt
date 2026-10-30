@@ -1,5 +1,8 @@
 package top.stellortus.stellar_music.ui.components
 
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween

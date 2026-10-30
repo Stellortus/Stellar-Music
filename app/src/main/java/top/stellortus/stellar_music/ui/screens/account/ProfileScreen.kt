@@ -1,5 +1,9 @@
 package top.stellortus.stellar_music.ui.screens.account
 
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarText
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.components.*
 
@@ -17,10 +21,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.utils.ToastManager
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
@@ -28,7 +31,6 @@ import top.stellortus.stellar_music.utils.extensions.toUserMessage
 
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = LocalAuthPreferences.current
     val username = prefs.username.orEmpty()
@@ -51,10 +53,9 @@ fun ProfileScreen(onLogout: () -> Unit) {
 
                         runCatching { AuthApi.logout() }
                             .onSuccess {
-                                prefs.clear()
                                 onLogout()
                             }
-                            .onFailure { e -> ToastManager.makeText(context, e.toUserMessage()) }
+                            .onFailure { e -> ToastManager.makeText(e.toUserMessage()) }
                         loading = false
                     }
                 },

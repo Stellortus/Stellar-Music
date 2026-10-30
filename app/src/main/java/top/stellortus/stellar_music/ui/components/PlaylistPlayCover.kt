@@ -1,9 +1,9 @@
 package top.stellortus.stellar_music.ui.components
 
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.background
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import top.stellortus.stellar_music.R
 import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholder
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholderSize
 
 @Composable
 fun PlaylistPlayCover(
@@ -67,16 +69,18 @@ fun PlaylistPlayCover(
         else -> "继续播放歌单：$name"
     }
     Box(
-        Modifier.semantics { contentDescription = actionLabel }.combinedClickable(
-            interactionSource = null,
-            indication = null,
-            enabled = enabled,
-            role = Role.Button,
-            onClickLabel = actionLabel,
-            onLongClickLabel = if (onLongClick != null) "歌单操作" else null,
-            onClick = onPlay,
-            onLongClick = onLongClick,
-        ),
+        Modifier
+            .semantics { contentDescription = actionLabel }
+            .combinedClickable(
+                interactionSource = null,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClickLabel = actionLabel,
+                onLongClickLabel = if (onLongClick != null) "歌单操作" else null,
+                onClick = onPlay,
+                onLongClick = onLongClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         CoverPlaceholder(size)
@@ -85,7 +89,8 @@ fun PlaylistPlayCover(
                 StellarTheme.sizes.coverIconMedium
             } else StellarTheme.sizes.coverIconSmall
             Box(
-                Modifier.testTag("playlistPlaybackOverlay")
+                Modifier
+                    .testTag("playlistPlaybackOverlay")
                     .matchParentSize()
                     .clip(StellarTheme.shapes.cover)
                     .graphicsLayer { alpha = controlsAlpha.value }
@@ -95,7 +100,9 @@ fun PlaylistPlayCover(
                 Icon(
                     painterResource(if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
                     contentDescription = null,
-                    modifier = Modifier.size(iconSize).testTag("playlistPlaybackIcon"),
+                    modifier = Modifier
+                        .size(iconSize)
+                        .testTag("playlistPlaybackIcon"),
                     tint = Color.White,
                 )
             }

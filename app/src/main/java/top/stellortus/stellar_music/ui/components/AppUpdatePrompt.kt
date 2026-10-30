@@ -1,5 +1,10 @@
 package top.stellortus.stellar_music.ui.components
 
+import top.stellortus.stellar_music.ui.widgets.StellarAlertDialog
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarText
+
 import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
@@ -20,7 +25,7 @@ import kotlinx.coroutines.withContext
 import top.stellortus.stellar_music.BuildConfig
 import top.stellortus.stellar_music.apkFromVersionName
 import top.stellortus.stellar_music.network.AppUpdateApi
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.utils.ToastManager
 import java.util.UUID
 
 @Composable
@@ -72,7 +77,7 @@ fun AppUpdatePrompt() {
                                 downloadUrl
                             )
                         }
-                        ToastManager.makeText(context, "已开始后台下载，请查看系统下载通知")
+                        ToastManager.makeText("已开始后台下载，请查看系统下载通知")
                         update = false
                     } catch (e: CancellationException) {
                         throw e

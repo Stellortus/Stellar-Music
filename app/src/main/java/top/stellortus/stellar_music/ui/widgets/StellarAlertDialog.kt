@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music.ui.components
+package top.stellortus.stellar_music.ui.widgets
 
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text

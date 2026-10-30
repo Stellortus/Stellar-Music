@@ -13,7 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import top.stellortus.stellar_music.StreamPlayer
-import top.stellortus.stellar_music.network.PlaylistApi
+import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music_common.dto.Track
 import kotlin.math.abs
 
@@ -24,7 +24,7 @@ class MusicPlayerState(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val playlistPlayback: PlaylistPlaybackController = PlaylistPlaybackController(
         scope = scope,
-        loadTracks = { PlaylistApi.getPlaylist(it).tracks },
+        loadTracks = { PlaylistManager.getPlaylist(it).tracks },
         onPlay = ::startTrack,
         onError = { playbackError = it },
         onQueueChanged = { tracks, index ->

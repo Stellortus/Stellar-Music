@@ -1,5 +1,11 @@
 package top.stellortus.stellar_music
 
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingState
+import top.stellortus.stellar_music.ui.widgets.StellarScaffold
+import top.stellortus.stellar_music.ui.widgets.StellarText
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.components.*
 
@@ -30,7 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
+import kotlinx.coroutines.CancellationException
 import top.stellortus.stellar_music.data.AuthPreferences
+import top.stellortus.stellar_music.db.manager.TrackManager
+import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.ApiException
 import top.stellortus.stellar_music.network.AuthApi
@@ -47,11 +56,15 @@ import top.stellortus.stellar_music.ui.screens.UploadScreen
 import top.stellortus.stellar_music.ui.screens.account.AccountScreen
 import top.stellortus.stellar_music.ui.screens.account.ProfileScreen
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
+import top.stellortus.stellar_music.utils.ToastManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ToastManager.init(applicationContext)
         AuthPreferences.init(applicationContext)
+        TrackManager.init(applicationContext)
+        PlaylistManager.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             CompositionLocalProvider(LocalAuthPreferences provides AuthPreferences) {
@@ -72,46 +85,75 @@ private enum class AuthState {
 
 @Composable
 private fun MusicApp() {
-    val context = LocalContext.current
     val prefs = LocalAuthPreferences.current
-    var authState by remember { mutableStateOf(AuthState.Loading) }
+    var authState by remember {
+        mutableStateOf(
+            if (prefs.hasToken && prefs.userId != null && !prefs.sessionExpired.value) AuthState.Authenticated
+            else AuthState.Loading
+        )
+    }
     var verifyAttempt by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(verifyAttempt) {
-        authState = AuthState.Loading
         if (!prefs.hasToken) {
+            prefs.clearSession()
             authState = AuthState.Unauthenticated
             return@LaunchedEffect
         }
-        runCatching { AuthApi.me() }
-            .onSuccess { me ->
+        if (prefs.userId == null) authState = AuthState.Loading
+        val verifyingToken = prefs.token
+        try {
+            val me = AuthApi.me()
+            if (prefs.token != verifyingToken || prefs.sessionExpired.value) return@LaunchedEffect
+            if (prefs.userId != null && prefs.userId != me.id) {
+                authState = AuthState.Loading
+                TrackManager.clear()
+                PlaylistManager.clear()
+            }
+            if (prefs.token == verifyingToken && !prefs.sessionExpired.value) {
                 prefs.username = me.username
                 prefs.userId = me.id
+                TrackManager.startSession()
+                PlaylistManager.startSession()
                 authState = AuthState.Authenticated
             }
-            .onFailure { e ->
-                top.stellortus.stellar_music.ui.ToastManager.makeText(context,
-                    if (e is ApiException && e.status == 401) "登录已失效，请重新登录" else e.message ?: "无法连接服务器")
-                authState = if (e is ApiException && e.status == 401) {
-                    prefs.clear()
-                    AuthState.Unauthenticated
-                } else {
-                    AuthState.NetworkError
-                }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (prefs.token != verifyingToken) return@LaunchedEffect
+            ToastManager.makeText(
+                if (error is ApiException && error.status == 401) "登录已失效，请重新登录"
+                else error.message ?: "无法连接服务器"
+            )
+            if (error is ApiException && error.status == 401) {
+                prefs.sessionExpired.value = true
+            } else if (!prefs.sessionExpired.value) {
+                authState = if (prefs.hasToken && prefs.userId != null) AuthState.Authenticated else AuthState.NetworkError
             }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        prefs.sessionExpired.collect { expired ->
+            if (expired) {
+                authState = AuthState.Loading
+                prefs.clearSession()
+                authState = AuthState.Unauthenticated
+            }
+        }
     }
 
     when (authState) {
         AuthState.Loading -> LoadingScreen()
         AuthState.Unauthenticated -> AccountScreen(
-            onLoggedIn = { authState = AuthState.Authenticated }
+            onLoggedIn = { authState = AuthState.Authenticated; verifyAttempt++ }
         )
         AuthState.Authenticated -> MainScreen(
-            onLogout = { authState = AuthState.Unauthenticated }
+            onLogout = { prefs.sessionExpired.value = true }
         )
         AuthState.NetworkError -> NetworkErrorScreen(
             onRetry = { verifyAttempt++ },
-            onGoToLogin = { authState = AuthState.Unauthenticated },
+            onGoToLogin = { prefs.sessionExpired.value = true },
         )
     }
 }
@@ -126,7 +168,7 @@ private fun MainScreen(onLogout: () -> Unit) {
     var queueVisible by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(playerState.playbackError) {
         playerState.playbackError?.let {
-            top.stellortus.stellar_music.ui.ToastManager.makeText(context, it)
+            ToastManager.makeText(it)
             playerState.clearPlaybackError()
         }
     }

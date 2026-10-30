@@ -1,5 +1,12 @@
 package top.stellortus.stellar_music.ui.screens.playlist
 
+import top.stellortus.stellar_music.ui.widgets.StellarAlertDialog
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarEmptyState
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarText
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.components.*
 
@@ -17,7 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import top.stellortus.stellar_music.network.NetworkService
+import top.stellortus.stellar_music.db.manager.TrackManager
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music_common.dto.Track
 
 /**
@@ -30,7 +38,6 @@ fun AddTracksDialog(
     onDismiss: () -> Unit,
     onConfirm: (List<Int>) -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     var reloadTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var selectedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -40,9 +47,9 @@ fun AddTracksDialog(
     LaunchedEffect(reloadTick) {
         isLoading = true
         errorMessage = null
-        runCatching { NetworkService.getAllMusicList() }
+        runCatching { TrackManager.getAllMusicList() }
             .onSuccess { tracks = it.distinctBy { track -> track.id } }
-            .onFailure { errorMessage = it.toPlaylistMessage(); top.stellortus.stellar_music.ui.ToastManager.makeText(context, it.toPlaylistMessage()) }
+            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
         isLoading = false
     }
 

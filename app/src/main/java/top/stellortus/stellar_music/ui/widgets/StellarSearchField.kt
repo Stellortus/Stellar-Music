@@ -1,4 +1,4 @@
-package top.stellortus.stellar_music.ui.components
+package top.stellortus.stellar_music.ui.widgets
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box

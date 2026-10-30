@@ -12,16 +12,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
-import top.stellortus.stellar_music.ui.components.CoverPlaceholderSize
 import top.stellortus.stellar_music.ui.components.PlaylistItem
 import top.stellortus.stellar_music.ui.components.PlaylistPlayCover
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholderSize
 import top.stellortus.stellar_music_common.dto.Playlist
 
 class PlaylistPlaybackControlsTest {

@@ -1,7 +1,15 @@
 package top.stellortus.stellar_music.ui.screens
 
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholder
+import top.stellortus.stellar_music.ui.widgets.CoverPlaceholderSize
+import top.stellortus.stellar_music.ui.widgets.FormCard
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarTone
+
 import top.stellortus.stellar_music.ui.theme.StellarTheme
-import top.stellortus.stellar_music.ui.components.*
 
 import android.content.Context
 import android.net.Uri
@@ -26,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.stellortus.stellar_music.network.NetworkService
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
 import java.io.File
 
@@ -64,7 +73,7 @@ fun UploadScreen() {
             }
             state = result.fold(
                 onSuccess = { UploadState.Success(it) },
-                onFailure = { top.stellortus.stellar_music.ui.ToastManager.makeText(context, it.toUserMessage()); UploadState.Error(it.toUserMessage()) }
+                onFailure = { ToastManager.makeText(it.toUserMessage()); UploadState.Error(it.toUserMessage()) }
             )
         }
     }

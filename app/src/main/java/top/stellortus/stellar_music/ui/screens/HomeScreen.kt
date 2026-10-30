@@ -24,22 +24,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
-import top.stellortus.stellar_music.network.NetworkService
-import top.stellortus.stellar_music.ui.ToastManager
-import top.stellortus.stellar_music.ui.components.StellarIndicatorSize
-import top.stellortus.stellar_music.ui.components.StellarLoadingIndicator
-import top.stellortus.stellar_music.ui.components.StellarLoadingState
-import top.stellortus.stellar_music.ui.components.StellarRetryAction
-import top.stellortus.stellar_music.ui.components.StellarSearchField
-import top.stellortus.stellar_music.ui.components.StellarText
-import top.stellortus.stellar_music.ui.components.StellarTextRole
-import top.stellortus.stellar_music.ui.components.StellarTone
+import top.stellortus.stellar_music.db.manager.TrackManager
+import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.ui.widgets.StellarIndicatorSize
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingState
+import top.stellortus.stellar_music.ui.widgets.StellarRetryAction
+import top.stellortus.stellar_music.ui.widgets.StellarSearchField
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextRole
+import top.stellortus.stellar_music.ui.widgets.StellarTone
 import top.stellortus.stellar_music.ui.components.TrackDetails
 import top.stellortus.stellar_music.ui.components.TrackItem
 import top.stellortus.stellar_music.ui.player.MusicPlayerState
@@ -61,7 +60,6 @@ fun HomeScreen(player: MusicPlayerState) {
     var endReached by remember { mutableStateOf(false) }
     var addToPlaylistTarget by remember { mutableStateOf<Track?>(null) }
     var searchText by remember { mutableStateOf("") }
-    val appContext = LocalContext.current
     val scope = rememberCoroutineScope()
     val searchState = remember { TrackSearchState(scope) }
     val homeListState = rememberLazyListState()
@@ -72,7 +70,7 @@ fun HomeScreen(player: MusicPlayerState) {
     LaunchedEffect(retryTick) {
         state = MusicListState.Loading
         currentIndex = 0
-        state = runCatching { NetworkService.getMusicList(currentIndex) }
+        state = runCatching { TrackManager.getMusicList(currentIndex) }
             .fold(
                 onSuccess = {
                     currentIndex = it.size
@@ -80,7 +78,7 @@ fun HomeScreen(player: MusicPlayerState) {
                     MusicListState.Success(it)
                 },
                 onFailure = {
-                    ToastManager.makeText(appContext, it.message ?: "获取音乐列表失败")
+                    ToastManager.makeText(it.message ?: "获取音乐列表失败")
                     MusicListState.Error(it.message.orEmpty())
                 }
             )
@@ -91,7 +89,7 @@ fun HomeScreen(player: MusicPlayerState) {
             if (!isLoadingMore && !endReached && state is MusicListState.Success) {
                 isLoadingMore = true
                 scope.launch {
-                    runCatching { NetworkService.getMusicList(currentIndex) }
+                    runCatching { TrackManager.getMusicList(currentIndex) }
                         .onSuccess { page ->
                             currentIndex += page.size
                             val existing = (state as? MusicListState.Success)?.tracks.orEmpty()
@@ -103,7 +101,7 @@ fun HomeScreen(player: MusicPlayerState) {
                                 state = MusicListState.Success(existing + fresh)
                             }
                         }
-                        .onFailure { ToastManager.makeText(appContext, it.message ?: "加载更多失败") }
+                        .onFailure { ToastManager.makeText(it.message ?: "加载更多失败") }
                     isLoadingMore = false
                 }
             }
@@ -159,7 +157,7 @@ fun HomeScreen(player: MusicPlayerState) {
 }
 
 @Composable
-private fun TrackList(
+internal fun TrackList(
     tracks: List<Track>,
     isLoadingMore: Boolean,
     endReached: Boolean,
@@ -243,27 +241,4 @@ private fun EndReachedFooter() {
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(vertical = StellarTheme.spacing.itemGap)
     )
-}
-
-@androidx.compose.ui.tooling.preview.Preview(name = "Home Light", widthDp = 360, heightDp = 640)
-@androidx.compose.ui.tooling.preview.Preview(name = "Home Dark", widthDp = 360, heightDp = 640, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
-@androidx.compose.ui.tooling.preview.Preview(name = "Home Large Text", widthDp = 320, heightDp = 640, fontScale = 1.5f)
-@Composable
-private fun HomePreview() {
-    top.stellortus.stellar_music.ui.theme.StellarMusicTheme {
-        Column(Modifier.fillMaxSize()) {
-            StellarSearchField("", {}, placeholder = "搜索音乐",
-                modifier = Modifier.padding(start = StellarTheme.spacing.page, end = StellarTheme.spacing.page,
-                    top = StellarTheme.spacing.page, bottom = StellarTheme.spacing.itemGap))
-            TrackList(
-                modifier = Modifier.weight(1f),
-                tracks = listOf(
-                    Track(1, "星河漫游 · 一首很长的歌名用于检查文本截断", listOf("Stellar", "夜航计划"), "music.mp3", "Listener", "", "", 0L),
-                    Track(2, "晚风与回声", emptyList(), "echo.mp3", "Listener", "", "", 0L)
-                ),
-                isLoadingMore = false, endReached = true, onLoadMore = {},
-                currentTrackId = 1, onTrackClick = {}, onTrackLongClick = {}
-            )
-        }
-    }
 }

@@ -1,5 +1,10 @@
 package top.stellortus.stellar_music.ui.screens
 
+import top.stellortus.stellar_music.ui.widgets.StellarEmptyState
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarRetryAction
+import top.stellortus.stellar_music.ui.widgets.StellarSearchField
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,8 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.ui.components.*
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
@@ -25,9 +29,8 @@ fun TrackSearchScreen(
     onTrackClick: (Track) -> Unit,
     onTrackLongClick: (Track) -> Unit
 ) {
-    val context = LocalContext.current
     val submit: () -> Unit = {
-        state.submit { ToastManager.makeText(context, it.toUserMessage()) }
+        state.submit { ToastManager.makeText(it.toUserMessage()) }
     }
     LaunchedEffect(state) { if (!state.submitted) submit() }
     BackHandler(onBack = onBack)

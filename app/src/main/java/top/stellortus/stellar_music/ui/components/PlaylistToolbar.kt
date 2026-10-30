@@ -10,10 +10,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import top.stellortus.stellar_music.R
 import top.stellortus.stellar_music.ui.theme.StellarTheme
+import top.stellortus.stellar_music.ui.widgets.StellarAlertDialog
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarCheckbox
+import top.stellortus.stellar_music.ui.widgets.StellarIcon
+import top.stellortus.stellar_music.ui.widgets.StellarIconButton
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextField
 
 @Composable
 fun PlaylistToolbar(onCreate: () -> Unit, enabled: Boolean = true) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = StellarTheme.spacing.page), horizontalArrangement = Arrangement.End) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = StellarTheme.spacing.page),
+        horizontalArrangement = Arrangement.End
+    ) {
         StellarIconButton(onClick = onCreate, enabled = enabled) {
             StellarIcon(painterResource(R.drawable.ic_add), "添加歌单")
         }
@@ -26,10 +39,17 @@ fun CreatePlaylistDialog(
     isPublic: Boolean, onPublicChange: (Boolean) -> Unit,
     submitting: Boolean, onCreate: () -> Unit, onDismiss: () -> Unit
 ) {
-    StellarAlertDialog(title = "新建歌单", onDismissRequest = { if (!submitting) onDismiss() },
+    StellarAlertDialog(
+        title = "新建歌单", onDismissRequest = { if (!submitting) onDismiss() },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(StellarTheme.spacing.itemGap)) {
-                StellarTextField(name, onNameChange, "歌单名称", Modifier.fillMaxWidth(), enabled = !submitting)
+                StellarTextField(
+                    name,
+                    onNameChange,
+                    "歌单名称",
+                    Modifier.fillMaxWidth(),
+                    enabled = !submitting
+                )
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     StellarCheckbox(isPublic, onPublicChange, enabled = !submitting)
                     StellarText("公开歌单")
@@ -37,9 +57,17 @@ fun CreatePlaylistDialog(
             }
         },
         confirmButton = {
-            StellarButton(onCreate, enabled = name.isNotBlank() && !submitting, loading = submitting) { StellarText("创建") }
+            StellarButton(
+                onCreate,
+                enabled = name.isNotBlank() && !submitting,
+                loading = submitting
+            ) { StellarText("创建") }
         },
         dismissButton = {
-            StellarButton(onDismiss, kind = StellarButtonKind.Text, enabled = !submitting) { StellarText("取消") }
+            StellarButton(
+                onDismiss,
+                kind = StellarButtonKind.Text,
+                enabled = !submitting
+            ) { StellarText("取消") }
         })
 }

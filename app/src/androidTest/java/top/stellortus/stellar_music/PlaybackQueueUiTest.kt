@@ -14,11 +14,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.Density
 import androidx.test.espresso.Espresso.pressBack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,9 +43,9 @@ import org.junit.Test
 import top.stellortus.stellar_music.ui.BottomTab
 import top.stellortus.stellar_music.ui.components.PlayerBarContent
 import top.stellortus.stellar_music.ui.components.StellarNavigationBar
-import top.stellortus.stellar_music.ui.components.StellarScaffold
 import top.stellortus.stellar_music.ui.player.PlaybackQueueHost
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
+import top.stellortus.stellar_music.ui.widgets.StellarScaffold
 import top.stellortus.stellar_music_common.dto.Track
 
 class PlaybackQueueUiTest {

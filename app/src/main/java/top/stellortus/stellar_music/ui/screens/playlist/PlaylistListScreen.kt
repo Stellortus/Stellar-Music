@@ -19,22 +19,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
-import top.stellortus.stellar_music.network.PlaylistApi
-import top.stellortus.stellar_music.ui.ToastManager
+import top.stellortus.stellar_music.db.manager.PlaylistManager
+import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.ui.components.CreatePlaylistDialog
 import top.stellortus.stellar_music.ui.components.PlaylistItem
 import top.stellortus.stellar_music.ui.components.PlaylistToolbar
-import top.stellortus.stellar_music.ui.components.StellarAlertDialog
-import top.stellortus.stellar_music.ui.components.StellarButton
-import top.stellortus.stellar_music.ui.components.StellarButtonKind
-import top.stellortus.stellar_music.ui.components.StellarEmptyState
-import top.stellortus.stellar_music.ui.components.StellarLoadingIndicator
-import top.stellortus.stellar_music.ui.components.StellarSearchField
-import top.stellortus.stellar_music.ui.components.StellarText
-import top.stellortus.stellar_music.ui.components.StellarTextField
+import top.stellortus.stellar_music.ui.widgets.StellarAlertDialog
+import top.stellortus.stellar_music.ui.widgets.StellarButton
+import top.stellortus.stellar_music.ui.widgets.StellarButtonKind
+import top.stellortus.stellar_music.ui.widgets.StellarEmptyState
+import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
+import top.stellortus.stellar_music.ui.widgets.StellarSearchField
+import top.stellortus.stellar_music.ui.widgets.StellarText
+import top.stellortus.stellar_music.ui.widgets.StellarTextField
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.CreatePlaylistRequest
 import top.stellortus.stellar_music_common.dto.Playlist
@@ -42,7 +41,7 @@ import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
 
 /**
  * 歌单列表页：显示所有人的歌单（不区分 owner），支持重命名、删除。
- * 状态全部用 remember 保存在内存里，不做本地持久化。
+ * 页面状态使用 remember；读取入口优先返回 Room 缓存并后台同步。
  */
 class PlaylistListState {
     val playlists = mutableStateOf<List<Playlist>>(emptyList())
@@ -61,7 +60,6 @@ fun PlaylistListScreen(
     isPlaying: Boolean = false,
     controlFeedbackVersion: Long = 0L,
 ) {
-    val context = LocalContext.current
     val userId = LocalAuthPreferences.current.userId
     val scope = rememberCoroutineScope()
 
@@ -82,9 +80,9 @@ fun PlaylistListScreen(
         if (reloadTick == 0 && pageState.loaded) return@LaunchedEffect
         isLoading = true
         errorMessage = null
-        runCatching { PlaylistApi.listPlaylists() }
+        runCatching { PlaylistManager.listPlaylists() }
             .onSuccess { playlists = it; pageState.loaded = true }
-            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(context, it.toPlaylistMessage()) }
+            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
         isLoading = false
     }
 
@@ -153,14 +151,14 @@ fun PlaylistListScreen(
                                         submitting = true
                                         scope.launch {
                                             runCatching {
-                                                PlaylistApi.updatePlaylist(playlist.id,
+                                                PlaylistManager.updatePlaylist(playlist.id,
                                                     UpdatePlaylistRequest(public = !playlist.public))
                                             }.onSuccess {
                                                 playlists = playlists.map {
                                                     if (it.id == playlist.id) it.copy(public = !playlist.public) else it
                                                 }
                                                 reloadTick++
-                                            }.onFailure { ToastManager.makeText(context, it.toPlaylistMessage()) }
+                                            }.onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
                                             submitting = false
                                         }
                                     }
@@ -182,9 +180,9 @@ fun PlaylistListScreen(
                 val request = CreatePlaylistRequest(name = createName.trim(), public = createPublic)
                 submitting = true
                 scope.launch {
-                    runCatching { PlaylistApi.createPlaylist(request) }
+                    runCatching { PlaylistManager.createPlaylist(request) }
                         .onSuccess { showCreate = false; reloadTick++ }
-                        .onFailure { ToastManager.makeText(context, it.toPlaylistMessage()) }
+                        .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
                     submitting = false
                 }
             }
@@ -211,7 +209,7 @@ fun PlaylistListScreen(
                         scope.launch {
                             submitting = true
                             runCatching {
-                                PlaylistApi.updatePlaylist(target.id,
+                                PlaylistManager.updatePlaylist(target.id,
                                     UpdatePlaylistRequest(name = name, public = target.public)
                                 )
                             }
@@ -219,7 +217,7 @@ fun PlaylistListScreen(
                                     renameTarget = null
                                     reloadTick++
                                 }
-                                .onFailure { ToastManager.makeText(context, it.toPlaylistMessage()) }
+                                .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
                             submitting = false
                         }
                     }
@@ -244,12 +242,12 @@ fun PlaylistListScreen(
                     onClick = {
                         scope.launch {
                             submitting = true
-                            runCatching { PlaylistApi.deletePlaylist(target.id) }
+                            runCatching { PlaylistManager.deletePlaylist(target.id) }
                                 .onSuccess {
                                     deleteTarget = null
                                     reloadTick++
                                 }
-                                .onFailure { ToastManager.makeText(context, it.toPlaylistMessage()) }
+                                .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
                             submitting = false
                         }
                     }

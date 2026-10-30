@@ -1,8 +1,22 @@
 package top.stellortus.stellar_music.data
 
 import androidx.core.content.edit
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
+import top.stellortus.stellar_music.db.manager.PlaylistManager
+import top.stellortus.stellar_music.db.manager.TrackManager
 
 object AuthPreferences : Preferences("auth_prefs") {
+    val sessionExpired = MutableStateFlow(false)
+
+    suspend fun clearSession() = withContext(NonCancellable) {
+        TrackManager.clear()
+        PlaylistManager.clear()
+        clear()
+        sessionExpired.value = false
+    }
+
     var token: String?
         get() = prefs.getString(KEY_TOKEN, null)
         set(value) = prefs.edit { putString(KEY_TOKEN, value) }
