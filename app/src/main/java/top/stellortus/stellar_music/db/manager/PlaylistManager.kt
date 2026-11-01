@@ -16,10 +16,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.encodeToString
 import top.stellortus.stellar_music.db.CacheEntity
 import top.stellortus.stellar_music.db.PlaylistsDatabase
 import top.stellortus.stellar_music.db.readCached
+import top.stellortus.stellar_music.db.readFresh
 import top.stellortus.stellar_music.network.PlaylistApi
 import top.stellortus.stellar_music.network.networkJson
 import top.stellortus.stellar_music_common.dto.CreatePlaylistRequest
@@ -28,7 +28,7 @@ import top.stellortus.stellar_music_common.dto.PlaylistDetail
 import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
 
 object PlaylistManager {
-    internal const val CACHE_UPDATE_FAILED = "操作成功，缓存更新失败，请重新打开页面"
+    internal const val CACHE_UPDATE_FAILED = "操作已成功，列表同步失败，请稍后刷新"
     private lateinit var database: PlaylistsDatabase
     private val dao get() = database.cacheDao()
     @Volatile private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -47,19 +47,23 @@ object PlaylistManager {
         if (!scope.isActive) scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 
-    suspend fun listPlaylists(): List<Playlist> {
-        val json = dao.readCached("list", scope, pending, mutationMutex) {
+    suspend fun listPlaylists(forceRefresh: Boolean = false): List<Playlist> {
+        val json = read("list", forceRefresh) {
             networkJson.encodeToString(PlaylistApi.listPlaylists())
         }
         return networkJson.decodeFromString(json)
     }
 
-    suspend fun getPlaylist(id: Int): PlaylistDetail {
-        val json = dao.readCached("detail:$id", scope, pending, mutationMutex) {
+    suspend fun getPlaylist(id: Int, forceRefresh: Boolean = false): PlaylistDetail {
+        val json = read("detail:$id", forceRefresh) {
             networkJson.encodeToString(PlaylistApi.getPlaylist(id))
         }
         return networkJson.decodeFromString(json)
     }
+
+    private suspend fun read(key: String, forceRefresh: Boolean, fetch: suspend () -> String): String =
+        if (forceRefresh) dao.readFresh(key, scope, mutationMutex, fetch)
+        else dao.readCached(key, scope, pending, mutationMutex, fetch)
 
     suspend fun createPlaylist(request: CreatePlaylistRequest): Unit = change {
         PlaylistApi.createPlaylist(request)
@@ -99,10 +103,10 @@ object PlaylistManager {
         afterChange { saveDetail(id); saveList() }
     }
 
-    suspend fun removeTrack(id: Int, trackId: Int): Unit = change {
-        PlaylistApi.removeTrack(id, trackId)
-        afterChange { saveDetail(id); saveList() }
-    }
+//    suspend fun removeTrack(id: Int, trackId: Int): Unit = change {
+//        PlaylistApi.removeTrack(id, trackId)
+//        afterChange { saveDetail(id); saveList() }
+//    }
 
     private suspend fun saveList() {
         val playlists = PlaylistApi.listPlaylists()

@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import top.stellortus.stellar_music.ui.components.CreatePlaylistDialog
 import top.stellortus.stellar_music.ui.components.PlaylistItem
 import top.stellortus.stellar_music.ui.components.PlaylistToolbar
@@ -47,6 +48,7 @@ class PlaylistListState {
     val playlists = mutableStateOf<List<Playlist>>(emptyList())
     var query by mutableStateOf("")
     var loaded = false
+    var forceRefresh by mutableStateOf(false)
 }
 
 @Composable
@@ -76,14 +78,27 @@ fun PlaylistListScreen(
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
 
+    fun reloadAfterChange(needsRefresh: Boolean) {
+        pageState.forceRefresh = pageState.forceRefresh || needsRefresh
+        pageState.loaded = false
+        reloadTick++
+    }
+
     LaunchedEffect(reloadTick) {
-        if (reloadTick == 0 && pageState.loaded) return@LaunchedEffect
+        if (reloadTick == 0 && pageState.loaded && !pageState.forceRefresh) return@LaunchedEffect
         isLoading = true
         errorMessage = null
-        runCatching { PlaylistManager.listPlaylists() }
-            .onSuccess { playlists = it; pageState.loaded = true }
-            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
-        isLoading = false
+        try {
+            runCatchingCancellable { PlaylistManager.listPlaylists(forceRefresh = pageState.forceRefresh) }
+                .onSuccess {
+                    playlists = it
+                    pageState.loaded = true
+                    pageState.forceRefresh = false
+                }
+                .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
+        } finally {
+            isLoading = false
+        }
     }
 
     Column(
@@ -150,16 +165,22 @@ fun PlaylistListScreen(
                                     if (!submitting) {
                                         submitting = true
                                         scope.launch {
-                                            runCatching {
-                                                PlaylistManager.updatePlaylist(playlist.id,
-                                                    UpdatePlaylistRequest(public = !playlist.public))
-                                            }.onSuccess {
-                                                playlists = playlists.map {
-                                                    if (it.id == playlist.id) it.copy(public = !playlist.public) else it
-                                                }
-                                                reloadTick++
-                                            }.onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
-                                            submitting = false
+                                            try {
+                                                runCatchingCancellable {
+                                                    PlaylistManager.updatePlaylist(playlist.id,
+                                                        UpdatePlaylistRequest(public = !playlist.public))
+                                                }.handlePlaylistChange(
+                                                    onCommitted = { needsRefresh ->
+                                                        playlists = playlists.map {
+                                                            if (it.id == playlist.id) it.copy(public = !playlist.public) else it
+                                                        }
+                                                        reloadAfterChange(needsRefresh)
+                                                    },
+                                                    onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
+                                                )
+                                            } finally {
+                                                submitting = false
+                                            }
                                         }
                                     }
                                 }
@@ -180,10 +201,18 @@ fun PlaylistListScreen(
                 val request = CreatePlaylistRequest(name = createName.trim(), public = createPublic)
                 submitting = true
                 scope.launch {
-                    runCatching { PlaylistManager.createPlaylist(request) }
-                        .onSuccess { showCreate = false; reloadTick++ }
-                        .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
-                    submitting = false
+                    try {
+                        runCatchingCancellable { PlaylistManager.createPlaylist(request) }
+                            .handlePlaylistChange(
+                                onCommitted = { needsRefresh ->
+                                    showCreate = false
+                                    reloadAfterChange(needsRefresh)
+                                },
+                                onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
+                            )
+                    } finally {
+                        submitting = false
+                    }
                 }
             }
         }
@@ -208,17 +237,19 @@ fun PlaylistListScreen(
                         val name = renameText.trim()
                         scope.launch {
                             submitting = true
-                            runCatching {
-                                PlaylistManager.updatePlaylist(target.id,
-                                    UpdatePlaylistRequest(name = name, public = target.public)
+                            try {
+                                runCatchingCancellable {
+                                    PlaylistManager.updatePlaylist(target.id, renamePlaylistRequest(name))
+                                }.handlePlaylistChange(
+                                    onCommitted = { needsRefresh ->
+                                        renameTarget = null
+                                        reloadAfterChange(needsRefresh)
+                                    },
+                                    onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
                                 )
+                            } finally {
+                                submitting = false
                             }
-                                .onSuccess {
-                                    renameTarget = null
-                                    reloadTick++
-                                }
-                                .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
-                            submitting = false
                         }
                     }
                 ) {
@@ -242,13 +273,19 @@ fun PlaylistListScreen(
                     onClick = {
                         scope.launch {
                             submitting = true
-                            runCatching { PlaylistManager.deletePlaylist(target.id) }
-                                .onSuccess {
-                                    deleteTarget = null
-                                    reloadTick++
-                                }
-                                .onFailure { ToastManager.makeText(it.toPlaylistMessage()) }
-                            submitting = false
+                            try {
+                                runCatchingCancellable { PlaylistManager.deletePlaylist(target.id) }
+                                    .handlePlaylistChange(
+                                        onCommitted = { needsRefresh ->
+                                            deleteTarget = null
+                                            playlists = playlists.filterNot { it.id == target.id }
+                                            reloadAfterChange(needsRefresh)
+                                        },
+                                        onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
+                                    )
+                            } finally {
+                                submitting = false
+                            }
                         }
                     }
                 ) {

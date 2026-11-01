@@ -94,4 +94,66 @@ class PlaylistSourcePlaybackTest {
         assertEquals(2, controller.currentPlaylistId)
         assertEquals(listOf<Int?>(2), sources)
     }
+
+    @Test fun originalPlaylistAndHomeTemporaryPlaylistBothLoopAcrossSourceChanges() = runBlocking {
+        val original = listOf(track(1), track(2), track(3))
+        val played = mutableListOf<Int>()
+        val sources = mutableListOf<Int?>()
+        val loads = mutableListOf<Int>()
+        var queue = emptyList<Track>()
+        var selected = -1
+        val controller = PlaylistPlaybackController(this,
+            { id -> loads += id; original }, { played += it.id }, { fail(it) },
+            { tracks, index -> queue = tracks; selected = index },
+            onSourcePlaylistChanged = { sources += it })
+
+        controller.playPlaylist(7)
+        yield()
+        controller.playQueueIndex(2)
+        controller.onCompleted()
+        assertEquals(original, queue)
+        assertEquals(0, selected)
+        assertEquals(7, controller.currentPlaylistId)
+
+        controller.play(track(2))
+        controller.onCompleted()
+        assertEquals(listOf(track(2)), queue)
+        assertEquals(0, selected)
+        assertNull(controller.currentPlaylistId)
+        assertEquals(listOf(7), loads)
+
+        controller.togglePlaylist(7)
+        yield()
+        repeat(3) { controller.onCompleted() }
+        assertEquals(original, queue)
+        assertEquals(0, selected)
+        assertEquals(7, controller.currentPlaylistId)
+        assertEquals(listOf(7, 7), loads)
+        assertEquals(listOf<Int?>(7, null, 7), sources)
+        assertEquals(listOf(1, 3, 1, 2, 2, 1, 2, 3, 1), played)
+        assertEquals(listOf(track(1), track(2), track(3)), original)
+        controller.release()
+    }
+
+    @Test fun homeTemporaryPlaylistRejectsLatePlaylistResultsAndKeepsLooping() = runBlocking {
+        val response = CompletableDeferred<List<Track>>()
+        val played = mutableListOf<Int>()
+        val queues = mutableListOf<List<Track>>()
+        val controller = PlaylistPlaybackController(this,
+            { withContext(NonCancellable) { response.await() } }, { played += it.id }, { fail(it) },
+            { tracks, _ -> queues += tracks })
+
+        controller.playPlaylist(7)
+        yield()
+        controller.play(track(99))
+        response.complete(listOf(track(1), track(2)))
+        yield()
+        repeat(2) { controller.onCompleted() }
+
+        assertEquals(listOf(99, 99, 99), played)
+        assertEquals(3, queues.size)
+        assertTrue(queues.all { it == listOf(track(99)) })
+        assertNull(controller.currentPlaylistId)
+        controller.release()
+    }
 }

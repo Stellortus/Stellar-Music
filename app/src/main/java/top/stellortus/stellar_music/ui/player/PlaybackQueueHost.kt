@@ -47,7 +47,10 @@ internal fun PlaybackQueueHost(
     var rootTop by remember { mutableFloatStateOf(0f) }
     var anchorTop by remember { mutableFloatStateOf(Float.NaN) }
     BackHandler(enabled = expanded, onBack = onDismiss)
-    BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { rootTop = it.boundsInWindow().top }) {
+    BoxWithConstraints(
+        modifier
+            .fillMaxSize()
+            .onGloballyPositioned { rootTop = it.boundsInWindow().top }) {
         val rootHeight = maxHeight
         val density = LocalDensity.current
         content(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top })
@@ -55,12 +58,23 @@ internal fun PlaybackQueueHost(
             val availableHeight = with(density) { (anchorTop - rootTop).toDp() }
                 .coerceIn(0.dp, rootHeight)
             val panelHeight = minOf(rootHeight * 0.65f, availableHeight)
-            Box(Modifier.fillMaxWidth().height(availableHeight).clipToBounds()) {
-                AnimatedVisibility(expanded, enter = fadeIn(tween(240)), exit = fadeOut(tween(240))) {
-                    Box(Modifier.fillMaxSize()
-                        .background(StellarTheme.colors.overlayScrim)
-                        .semantics { contentDescription = "收起当前播放列表" }
-                        .clickable(onClick = onDismiss))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(availableHeight)
+                    .clipToBounds()
+            ) {
+                AnimatedVisibility(
+                    expanded,
+                    enter = fadeIn(tween(240)),
+                    exit = fadeOut(tween(240))
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(StellarTheme.colors.overlayScrim)
+                            .semantics { contentDescription = "收起当前播放列表" }
+                            .clickable(onClick = onDismiss))
                 }
                 AnimatedVisibility(
                     visible = expanded,
@@ -70,7 +84,13 @@ internal fun PlaybackQueueHost(
                 ) {
                     PlaybackQueueSheet(
                         tracks, currentIndex, onSelect, onDismiss,
-                        Modifier.fillMaxWidth().padding(horizontal = StellarTheme.spacing.section)
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = StellarTheme.spacing.section,
+                                end = StellarTheme.spacing.section,
+                                bottom = StellarTheme.spacing.page
+                            )
                             .heightIn(max = panelHeight),
                     )
                 }

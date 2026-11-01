@@ -36,6 +36,7 @@ import kotlinx.coroutines.withContext
 import top.stellortus.stellar_music.network.NetworkService
 import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import java.io.File
 
 private sealed interface UploadState {
@@ -58,23 +59,27 @@ fun UploadScreen() {
 
         scope.launch {
             state = UploadState.Uploading
-            val result = runCatching {
-                val file = withContext(Dispatchers.IO) {
-                    uri.copyToCache(context)
+            try {
+                val result = runCatchingCancellable {
+                    val file = withContext(Dispatchers.IO) {
+                        uri.copyToCache(context)
+                    }
+                    try {
+                        // 非 2xx（如 401）会抛出 ApiException，不再误报成功。
+                        NetworkService.upload(file)
+                        file.name
+                    } finally {
+                        // 无论成功失败都清掉缓存中的临时文件。
+                        file.delete()
+                    }
                 }
-                try {
-                    // 非 2xx（如 401）会抛出 ApiException，不再误报成功。
-                    NetworkService.upload(file)
-                    file.name
-                } finally {
-                    // 无论成功失败都清掉缓存中的临时文件。
-                    file.delete()
-                }
+                state = result.fold(
+                    onSuccess = { UploadState.Success(it) },
+                    onFailure = { ToastManager.makeText(it.toUserMessage()); UploadState.Error(it.toUserMessage()) }
+                )
+            } finally {
+                if (state is UploadState.Uploading) state = UploadState.Idle
             }
-            state = result.fold(
-                onSuccess = { UploadState.Success(it) },
-                onFailure = { ToastManager.makeText(it.toUserMessage()); UploadState.Error(it.toUserMessage()) }
-            )
         }
     }
 

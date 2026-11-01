@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import top.stellortus.stellar_music_common.dto.Playlist
 import top.stellortus.stellar_music_common.dto.Track
 
@@ -50,10 +51,13 @@ fun AddToPlaylistDialog(track: Track, onDismiss: () -> Unit) {
     LaunchedEffect(reloadTick) {
         isLoading = true
         errorMessage = null
-        runCatching { PlaylistManager.listPlaylists() }
-            .onSuccess { playlists = it }
-            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
-        isLoading = false
+        try {
+            runCatchingCancellable { PlaylistManager.listPlaylists() }
+                .onSuccess { playlists = it }
+                .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
+        } finally {
+            isLoading = false
+        }
     }
 
     StellarAlertDialog(
@@ -92,21 +96,19 @@ fun AddToPlaylistDialog(track: Track, onDismiss: () -> Unit) {
 
                                 scope.launch {
                                     submitting = true
-                                    runCatching {
-                                        PlaylistManager.addTracks(playlist.id, listOf(track.id))
+                                    try {
+                                        runCatchingCancellable {
+                                            PlaylistManager.addTracks(playlist.id, listOf(track.id))
+                                        }.handlePlaylistChange(
+                                            onCommitted = { needsRefresh ->
+                                                onDismiss()
+                                                if (!needsRefresh) ToastManager.makeText("已添加到「${playlist.name}」")
+                                            },
+                                            onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
+                                        )
+                                    } finally {
+                                        submitting = false
                                     }
-                                        .onSuccess {
-                                            onDismiss()
-                                            ToastManager.makeText(
-                                                "已添加到「${playlist.name}」"
-                                            )
-                                        }
-                                        .onFailure {
-                                            ToastManager.makeText(
-                                                it.toPlaylistMessage()
-                                            )
-                                        }
-                                    submitting = false
                                 }
                             }
                         }

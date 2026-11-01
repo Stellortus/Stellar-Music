@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import top.stellortus.stellar_music.db.manager.TrackManager
 import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import top.stellortus.stellar_music_common.dto.Track
 
 /**
@@ -47,10 +48,13 @@ fun AddTracksDialog(
     LaunchedEffect(reloadTick) {
         isLoading = true
         errorMessage = null
-        runCatching { TrackManager.getAllMusicList() }
-            .onSuccess { tracks = it.distinctBy { track -> track.id } }
-            .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
-        isLoading = false
+        try {
+            runCatchingCancellable { TrackManager.getAllMusicList() }
+                .onSuccess { tracks = it.distinctBy { track -> track.id } }
+                .onFailure { errorMessage = it.toPlaylistMessage(); ToastManager.makeText(it.toPlaylistMessage()) }
+        } finally {
+            isLoading = false
+        }
     }
 
     StellarAlertDialog(

@@ -38,7 +38,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
 import top.stellortus.stellar_music_common.dto.AuthResponse
 import top.stellortus.stellar_music.data.AuthPreferences
 import top.stellortus.stellar_music.db.manager.TrackManager
@@ -46,6 +45,7 @@ import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 
 private const val ROUTE_LOGIN = "login"
 private const val ROUTE_REGISTER = "register"
@@ -152,15 +152,13 @@ private fun LoginScreen(
                         else -> scope.launch {
                             loading = true
 
-                            runCatching { saveAuth(preferences, AuthApi.login(username.trim(), password)) }
-                                .onSuccess {
-                                    onLoggedIn()
-                                }
-                                .onFailure { e ->
-                                    if (e is CancellationException) throw e
-                                    ToastManager.makeText(e.toUserMessage())
-                                }
-                            loading = false
+                            try {
+                                runCatchingCancellable { saveAuth(preferences, AuthApi.login(username.trim(), password)) }
+                                    .onSuccess { onLoggedIn() }
+                                    .onFailure { e -> ToastManager.makeText(e.toUserMessage()) }
+                            } finally {
+                                loading = false
+                            }
                         }
                     }
                 },
@@ -231,15 +229,13 @@ private fun RegisterScreen(
                         else -> scope.launch {
                             loading = true
 
-                            runCatching { saveAuth(preferences, AuthApi.register(username.trim(), password)) }
-                                .onSuccess {
-                                    onLoggedIn()
-                                }
-                                .onFailure { e ->
-                                    if (e is CancellationException) throw e
-                                    ToastManager.makeText(e.toUserMessage())
-                                }
-                            loading = false
+                            try {
+                                runCatchingCancellable { saveAuth(preferences, AuthApi.register(username.trim(), password)) }
+                                    .onSuccess { onLoggedIn() }
+                                    .onFailure { e -> ToastManager.makeText(e.toUserMessage()) }
+                            } finally {
+                                loading = false
+                            }
                         }
                     }
                 },

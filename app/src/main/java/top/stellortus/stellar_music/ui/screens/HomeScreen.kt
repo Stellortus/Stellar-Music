@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.db.manager.TrackManager
 import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import top.stellortus.stellar_music.ui.widgets.StellarIndicatorSize
 import top.stellortus.stellar_music.ui.widgets.StellarLoadingIndicator
 import top.stellortus.stellar_music.ui.widgets.StellarLoadingState
@@ -70,7 +71,7 @@ fun HomeScreen(player: MusicPlayerState) {
     LaunchedEffect(retryTick) {
         state = MusicListState.Loading
         currentIndex = 0
-        state = runCatching { TrackManager.getMusicList(currentIndex) }
+        state = runCatchingCancellable { TrackManager.getMusicList(currentIndex) }
             .fold(
                 onSuccess = {
                     currentIndex = it.size
@@ -89,20 +90,23 @@ fun HomeScreen(player: MusicPlayerState) {
             if (!isLoadingMore && !endReached && state is MusicListState.Success) {
                 isLoadingMore = true
                 scope.launch {
-                    runCatching { TrackManager.getMusicList(currentIndex) }
-                        .onSuccess { page ->
-                            currentIndex += page.size
-                            val existing = (state as? MusicListState.Success)?.tracks.orEmpty()
-                            val known = existing.mapTo(mutableSetOf()) { it.id }
-                            val fresh = page.filter { known.add(it.id) }
-                            if (fresh.isEmpty()) {
-                                endReached = true
-                            } else {
-                                state = MusicListState.Success(existing + fresh)
+                    try {
+                        runCatchingCancellable { TrackManager.getMusicList(currentIndex) }
+                            .onSuccess { page ->
+                                currentIndex += page.size
+                                val existing = (state as? MusicListState.Success)?.tracks.orEmpty()
+                                val known = existing.mapTo(mutableSetOf()) { it.id }
+                                val fresh = page.filter { known.add(it.id) }
+                                if (fresh.isEmpty()) {
+                                    endReached = true
+                                } else {
+                                    state = MusicListState.Success(existing + fresh)
+                                }
                             }
-                        }
-                        .onFailure { ToastManager.makeText(it.message ?: "加载更多失败") }
-                    isLoadingMore = false
+                            .onFailure { ToastManager.makeText(it.message ?: "加载更多失败") }
+                    } finally {
+                        isLoadingMore = false
+                    }
                 }
             }
         }

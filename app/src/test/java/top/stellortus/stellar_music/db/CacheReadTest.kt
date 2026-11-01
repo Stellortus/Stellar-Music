@@ -48,6 +48,7 @@ class CacheReadTest {
         val dao = MemoryDao()
 
         suspend fun read(fetch: suspend () -> String) = dao.readCached("list", scope, pending, mutex, fetch)
+        suspend fun fresh(fetch: suspend () -> String) = dao.readFresh("list", scope, mutex, fetch)
         suspend fun finishSync() = job.children.toList().joinAll()
     }
 
@@ -199,6 +200,85 @@ class CacheReadTest {
 
             response.complete("late-response")
             cleanup.await()
+            assertTrue(dao.entries.isEmpty())
+            assertEquals(0, dao.saves)
+        }
+    }
+
+    @Test
+    fun explicitRefreshWaitsForNetworkAndSaveEvenWhenOldCacheExists() = runBlocking {
+        withCache {
+            dao.entries["list"] = CacheEntity("list", "old")
+            dao.saveGate = CompletableDeferred()
+            dao.savedValue = "saved-value"
+            val response = CompletableDeferred<String>()
+            val caller = async { fresh { response.await() } }
+            yield()
+            assertFalse(caller.isCompleted)
+            response.complete("network-value")
+            yield()
+            assertFalse(caller.isCompleted)
+            assertEquals("old", dao.entries["list"]?.json)
+            dao.saveGate!!.complete(Unit)
+            assertEquals("saved-value", caller.await())
+            assertEquals(1, dao.saves)
+        }
+    }
+
+    @Test
+    fun explicitRefreshFailuresDoNotReturnStaleCacheAndCanBeRetried() = runBlocking {
+        for (failSave in listOf(false, true)) {
+            withCache {
+                dao.entries["list"] = CacheEntity("list", "old")
+                val error = IOException(if (failSave) "disk full" else "offline")
+                if (failSave) dao.saveFailure = error
+                val failure = runCatching {
+                    fresh { if (!failSave) throw error else "new" }
+                }.exceptionOrNull()
+                assertTrue(failure is IOException)
+                assertEquals(error.message, failure?.message)
+                assertEquals("old", dao.entries["list"]?.json)
+                dao.saveFailure = null
+                assertEquals("retried", fresh { "retried" })
+                assertEquals("retried", dao.entries["list"]?.json)
+            }
+        }
+    }
+
+    @Test
+    fun explicitRefreshWaitsForEarlierSynchronizationAndKeepsTheNewestValue() = runBlocking {
+        withCache {
+            dao.entries["list"] = CacheEntity("list", "old")
+            val response = CompletableDeferred<String>()
+            val fetches = mutableListOf<String>()
+            assertEquals("old", read { fetches += "background"; response.await() })
+            val caller = async { fresh { fetches += "explicit"; "latest" } }
+            yield()
+            assertFalse(caller.isCompleted)
+            assertEquals(listOf("background"), fetches)
+            response.complete("earlier")
+            assertEquals("latest", caller.await())
+            finishSync()
+            assertEquals("latest", dao.entries["list"]?.json)
+            assertEquals(listOf("background", "explicit"), fetches)
+        }
+    }
+
+    @Test
+    fun sessionCleanupAlsoRejectsLateExplicitRefreshResults() = runBlocking {
+        withCache {
+            dao.entries["list"] = CacheEntity("list", "old")
+            val response = CompletableDeferred<String>()
+            val caller = async { fresh { withContext(NonCancellable) { response.await() } } }
+            yield()
+            job.cancel()
+            val cleanup = async { job.join(); dao.clear() }
+            yield()
+            assertFalse(cleanup.isCompleted)
+            response.complete("late")
+            cleanup.await()
+            caller.join()
+            assertTrue(caller.isCancelled)
             assertTrue(dao.entries.isEmpty())
             assertEquals(0, dao.saves)
         }

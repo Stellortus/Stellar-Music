@@ -25,7 +25,7 @@ class PlaybackQueueTest {
         assertTrue(updates.all { it.first.map { track -> track.id } == listOf(1, 2, 3) })
     }
 
-    @Test fun standaloneSongIsVisibleWithoutEnablingLooping() = runBlocking {
+    @Test fun standaloneSongIsVisibleAndLoopsByDefault() = runBlocking {
         val played = mutableListOf<Int>()
         var queue = emptyList<Track>()
         var selected = -1
@@ -34,7 +34,7 @@ class PlaybackQueueTest {
         controller.playPlaylist(listOf(track(1), track(2)))
         controller.play(track(3))
         controller.onCompleted()
-        assertEquals(listOf(1, 3), played)
+        assertEquals(listOf(1, 3, 3), played)
         assertEquals(listOf(track(3)), queue)
         assertEquals(0, selected)
     }

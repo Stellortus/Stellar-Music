@@ -20,20 +20,23 @@ internal class PlaylistPlaybackController(
         private set
 
     private var tracks = emptyList<Track>()
-    private var index = 0
     private var loopEnabled = false
     private var request: Job? = null
     private var revision = 0
+    // These stateful objects belong to the app's single playback session.
+    private val orders = listOf(SequentialOrder, ShuffleOrder, RepeatOneOrder)
+    private val activeOrder: PlaybackOrder = SequentialOrder
 
-    fun play(track: Track) {
-        cancelRequest()
-        stopLoop()
-        tracks = listOf(track)
-        index = 0
-        updateSource(null)
-        onQueueChanged(tracks, index)
-        onPlay(track)
+    init {
+        orders.forEach { it.reset() }
     }
+
+    /** Home selections are temporary, single-track playlists using the same playback pipeline. */
+    fun play(track: Track) = playPlaylist(
+        tracks = listOf(track),
+        startIndex = 0,
+        sourcePlaylistId = null,
+    )
 
     fun playPlaylist(playlistId: Int) {
         cancelRequest()
@@ -78,31 +81,54 @@ internal class PlaylistPlaybackController(
         }
         require(startIndex in snapshot.indices)
         tracks = snapshot.toList()
-        index = startIndex
-        loopEnabled = true
+        SequentialOrder.initialize(tracks.size)
+        val order = (listOf(startIndex) + tracks.indices.filter { it != startIndex }.shuffled()).toIntArray()
+        ShuffleOrder.initialize(order)
+        RepeatOneOrder.initialize(order)
         updateSource(sourcePlaylistId)
-        onQueueChanged(tracks, index)
-        onPlay(tracks[index])
+        playResolvedIndex(startIndex)
     }
 
     fun playQueueIndex(selectedIndex: Int) {
         if (selectedIndex !in tracks.indices) return
         cancelRequest()
-        if (selectedIndex == index) return
-        index = selectedIndex
-        onQueueChanged(tracks, index)
-        onPlay(tracks[index])
+        if (selectedIndex == activeOrder.index) return
+        playResolvedIndex(selectedIndex)
+    }
+
+    fun next() {
+        cancelRequest()
+        playResolvedIndex(activeOrder.next())
+    }
+
+    fun previous() {
+        cancelRequest()
+        playResolvedIndex(activeOrder.previous())
     }
 
     fun onCompleted() {
         if (!loopEnabled || tracks.isEmpty()) return
-        index = (index + 1) % tracks.size
-        onQueueChanged(tracks, index)
-        onPlay(tracks[index])
+        playResolvedIndex(activeOrder.step())
+    }
+
+    private fun playResolvedIndex(target: Int?) {
+        if (target == null || target !in tracks.indices) return
+        orders.forEach { it.syncIndex(target) }
+        loopEnabled = true
+        onQueueChanged(tracks, target)
+        onPlay(tracks[target])
     }
 
     fun stopLoop() {
         loopEnabled = false
+    }
+
+    fun release() {
+        cancelRequest()
+        stopLoop()
+        tracks = emptyList()
+        currentPlaylistId = null
+        orders.forEach { it.reset() }
     }
 
     fun cancelRequest() {

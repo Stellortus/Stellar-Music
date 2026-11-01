@@ -30,6 +30,22 @@ interface CacheDao {
     suspend fun clear()
 }
 
+/** Explicit refreshes wait for both the network and the saved value, without returning old cache. */
+internal suspend fun CacheDao.readFresh(
+    key: String,
+    scope: CoroutineScope,
+    mutex: Mutex,
+    fetch: suspend () -> String,
+): String = scope.async {
+    mutex.withLock {
+        val json = fetch()
+        currentCoroutineContext().ensureActive()
+        save(CacheEntity(key, json))
+        currentCoroutineContext().ensureActive()
+        checkNotNull(get(key)) { "缓存写入失败：$key" }.json
+    }
+}.await()
+
 /** A cache hit returns its snapshot without waiting for the session-owned synchronization. */
 internal suspend fun CacheDao.readCached(
     key: String,
@@ -54,7 +70,7 @@ internal suspend fun CacheDao.readCached(
             pending[key] = task
             task.invokeOnCompletion { failure ->
                 synchronized(pending) {
-                    if (pending[key] === task) pending.remove(key)
+                    if (pending[key] === task) pending.keys.remove(key)
                 }
                 if (failure != null && failure !is CancellationException) {
                     Logger.getLogger("MusicCache").log(Level.WARNING, "Cache synchronization failed: $key", failure)

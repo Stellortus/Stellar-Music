@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.network.AuthApi
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 
 @Composable
 fun ProfileScreen(onLogout: () -> Unit) {
@@ -51,12 +52,13 @@ fun ProfileScreen(onLogout: () -> Unit) {
                     scope.launch {
                         loading = true
 
-                        runCatching { AuthApi.logout() }
-                            .onSuccess {
-                                onLogout()
-                            }
-                            .onFailure { e -> ToastManager.makeText(e.toUserMessage()) }
-                        loading = false
+                        try {
+                            runCatchingCancellable { AuthApi.logout() }
+                                .onSuccess { onLogout() }
+                                .onFailure { e -> ToastManager.makeText(e.toUserMessage()) }
+                        } finally {
+                            loading = false
+                        }
                     }
                 },
                 enabled = !loading,

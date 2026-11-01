@@ -94,10 +94,8 @@ class MusicPlayerState(context: Context) {
     var playbackError: String? by mutableStateOf(null)
         private set
 
-    /** 点击列表里的歌曲：重置进度并开始播放。 */
+    /** 主页点播：创建单首临时播放队列，通过统一的歌单逻辑循环播放。 */
     fun play(track: Track) = playlistPlayback.play(track)
-
-    fun playPlaylist(playlistId: Int) = playlistPlayback.playPlaylist(playlistId)
 
     fun playPlaylist(tracks: List<Track>, startIndex: Int = 0, sourcePlaylistId: Int? = null) =
         playlistPlayback.playPlaylist(tracks, startIndex, sourcePlaylistId)
@@ -133,7 +131,7 @@ class MusicPlayerState(context: Context) {
     }
 
     fun release() {
-        playlistPlayback.cancelRequest()
+        playlistPlayback.release()
         scope.cancel()
         player.release()
     }

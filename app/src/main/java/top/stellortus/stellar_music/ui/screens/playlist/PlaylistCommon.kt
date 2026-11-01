@@ -3,6 +3,7 @@ package top.stellortus.stellar_music.ui.screens.playlist
 import top.stellortus.stellar_music.network.ApiException
 import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.utils.extensions.toUserMessage
+import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -13,6 +14,22 @@ internal fun Throwable.toPlaylistMessage(): String =
 
 internal val Throwable.changeWasCommitted: Boolean
     get() = this is IllegalStateException && message == PlaylistManager.CACHE_UPDATE_FAILED
+
+internal fun renamePlaylistRequest(name: String) = UpdatePlaylistRequest(name = name, public = null)
+
+/** A cache failure after committing still completes the UI action, then reports the warning. */
+internal inline fun Result<Unit>.handlePlaylistChange(
+    onCommitted: (forceRefresh: Boolean) -> Unit,
+    onFailure: (Throwable) -> Unit,
+) {
+    fold(
+        onSuccess = { onCommitted(false) },
+        onFailure = { error ->
+            if (error.changeWasCommitted) onCommitted(true)
+            onFailure(error)
+        },
+    )
+}
 
 /** 服务端时间戳是毫秒。minSdk 24，用不了 java.time。 */
 internal fun formatDateTime(millis: Long): String {

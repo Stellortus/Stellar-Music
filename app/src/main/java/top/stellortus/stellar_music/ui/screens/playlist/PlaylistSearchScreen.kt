@@ -9,72 +9,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import top.stellortus.stellar_music.network.PlaylistApi
 import top.stellortus.stellar_music.utils.ToastManager
 import top.stellortus.stellar_music.ui.components.*
+import top.stellortus.stellar_music.ui.screens.SearchState
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.Playlist
 
 /** Owned by the playlist navigation host so detail navigation preserves the search. */
 class PlaylistSearchState(
-    private val scope: CoroutineScope,
-    private val search: suspend (String) -> List<Playlist> = PlaylistApi::searchPlaylists
-) {
-    var query by mutableStateOf(""); private set
-    var results by mutableStateOf<List<Playlist>>(emptyList()); private set
-    var loading by mutableStateOf(false); private set
-    var submitted by mutableStateOf(false); private set
-    var failed by mutableStateOf(false); private set
-    private var request: Job? = null
-    private var revision = 0
-
-    fun edit(value: String) {
-        cancel()
-        query = value
-        results = emptyList()
-        loading = false
-        submitted = false
-        failed = false
-    }
-
-    fun cancel() {
-        revision++
-        request?.cancel()
-        loading = false
-    }
-
-    fun submit(onError: (Throwable) -> Unit) {
-        val key = query.trim()
-        edit(query)
-        if (key.isEmpty()) return
-        val currentRevision = revision
-        loading = true
-        submitted = true
-        request = scope.launch {
-            try {
-                val response = search(key)
-                if (revision == currentRevision) results = response
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                if (revision == currentRevision) {
-                    failed = true
-                    onError(error)
-                }
-            } finally {
-                if (revision == currentRevision) loading = false
-            }
-        }
-    }
-}
+    scope: CoroutineScope,
+    search: suspend (String) -> List<Playlist> = PlaylistApi::searchPlaylists,
+) : SearchState<Playlist>(scope, search)
 
 @Composable
 fun PlaylistSearchScreen(

@@ -37,12 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
 import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.utils.ToastManager
+import top.stellortus.stellar_music.utils.extensions.runCatchingCancellable
 import top.stellortus.stellar_music.ui.player.MusicPlayerState
 import top.stellortus.stellar_music_common.dto.PlaylistDetail
-import top.stellortus.stellar_music_common.dto.UpdatePlaylistRequest
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -54,6 +53,7 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var reloadTick by remember { mutableIntStateOf(0) }
+    var forceRefresh by remember(playlistId) { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -64,12 +64,15 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
         isLoading = true
         errorMessage = null
         try {
-            detail = PlaylistManager.getPlaylist(playlistId)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Exception) {
-            errorMessage = error.toPlaylistMessage()
-            ToastManager.makeText(error.toPlaylistMessage())
+            runCatchingCancellable { PlaylistManager.getPlaylist(playlistId, forceRefresh = forceRefresh) }
+                .onSuccess {
+                    detail = it
+                    forceRefresh = false
+                }
+                .onFailure {
+                    errorMessage = it.toPlaylistMessage()
+                    ToastManager.makeText(it.toPlaylistMessage())
+                }
         } finally {
             isLoading = false
         }
@@ -191,18 +194,19 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
             onConfirm = { trackIds ->
                 scope.launch {
                     submitting = true
-                    runCatching { PlaylistManager.addTracks(playlistId, trackIds) }
-                        .onSuccess {
-                            showAddDialog = false
-                            reloadTick++
-                        }
-                        .onFailure {
-                            if (it is CancellationException) throw it
-                            if (it.changeWasCommitted) showAddDialog = false
-                            ToastManager.makeText(it.toPlaylistMessage())
-                            reloadTick++
-                        }
-                    submitting = false
+                    try {
+                        runCatchingCancellable { PlaylistManager.addTracks(playlistId, trackIds) }
+                            .handlePlaylistChange(
+                                onCommitted = { needsRefresh ->
+                                    showAddDialog = false
+                                    forceRefresh = forceRefresh || needsRefresh
+                                    reloadTick++
+                                },
+                                onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
+                            )
+                    } finally {
+                        submitting = false
+                    }
                 }
             }
         )
@@ -227,22 +231,20 @@ fun PlaylistDetailScreen(playlistId: Int, player: MusicPlayerState, onBack: () -
                         val name = renameText.trim()
                         scope.launch {
                             submitting = true
-                            runCatching {
-                                PlaylistManager.updatePlaylist(playlistId,
-                                    UpdatePlaylistRequest(name = name, public = null)
+                            try {
+                                runCatchingCancellable {
+                                    PlaylistManager.updatePlaylist(playlistId, renamePlaylistRequest(name))
+                                }.handlePlaylistChange(
+                                    onCommitted = { needsRefresh ->
+                                        showRenameDialog = false
+                                        forceRefresh = forceRefresh || needsRefresh
+                                        reloadTick++
+                                    },
+                                    onFailure = { ToastManager.makeText(it.toPlaylistMessage()) },
                                 )
+                            } finally {
+                                submitting = false
                             }
-                                .onSuccess {
-                                    showRenameDialog = false
-                                    reloadTick++
-                                }
-                                .onFailure {
-                                    if (it is CancellationException) throw it
-                                    if (it.changeWasCommitted) showRenameDialog = false
-                                    ToastManager.makeText(it.toPlaylistMessage())
-                                    reloadTick++
-                                }
-                            submitting = false
                         }
                     }
                 ) {
