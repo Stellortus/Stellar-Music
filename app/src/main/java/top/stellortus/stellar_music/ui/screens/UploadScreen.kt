@@ -128,9 +128,7 @@ private fun Uri.copyToCache(context: Context): File {
     )?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
     }
-    val safeName = (originalName?.takeIf {
-        it.matches(Regex("^[^\\p{P}][\\s\\S]*\$"))
-    } ?: "music-${System.currentTimeMillis()}.mp3")
+    val safeName = uploadCacheFileName(originalName) { "music-${System.currentTimeMillis()}.mp3" }
     val target = File(context.cacheDir, safeName)
     context.contentResolver.openInputStream(this).use { input ->
         requireNotNull(input) { "无法读取所选文件" }

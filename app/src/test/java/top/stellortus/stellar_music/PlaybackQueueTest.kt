@@ -9,6 +9,21 @@ import top.stellortus.stellar_music_common.dto.Track
 class PlaybackQueueTest {
     private fun track(id: Int) = Track(id, "歌曲$id", emptyList(), "$id.mp3", "", "", "", 0L)
 
+    @Test fun duplicateSongsRemainSeparateQueuePositionsDuringSelectionAndNavigation() = runBlocking {
+        val played = mutableListOf<Int>()
+        val selected = mutableListOf<Int>()
+        val controller = PlaylistPlaybackController(this, { emptyList() }, { played += it.id },
+            { fail(it) }, { _, index -> selected += index })
+        controller.playPlaylist(listOf(track(1), track(2), track(1)))
+        controller.playQueueIndex(2)
+        controller.next()
+        controller.previous()
+        controller.onCompleted()
+        assertEquals(listOf(1, 1, 1, 1, 1), played)
+        assertEquals(listOf(0, 2, 0, 2, 0), selected)
+        controller.release()
+    }
+
     @Test fun selectionAndCompletionPublishTheSameSnapshotAndCorrectIndex() = runBlocking {
         val played = mutableListOf<Int>()
         val updates = mutableListOf<Pair<List<Track>, Int>>()

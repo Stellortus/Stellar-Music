@@ -23,12 +23,15 @@ internal class PlaylistPlaybackController(
     private var loopEnabled = false
     private var request: Job? = null
     private var revision = 0
-    // These stateful objects belong to the app's single playback session.
-    private val orders = listOf(SequentialOrder, ShuffleOrder, RepeatOneOrder)
-    private val activeOrder: PlaybackOrder = SequentialOrder
+    private var order: PlaybackOrder? = null
 
-    init {
-        orders.forEach { it.reset() }
+    var mode: PlaybackMode = PlaybackMode.Cyclic
+        private set
+
+    /** Changes future navigation without touching the playing track or pending requests. */
+    fun changeMode(mode: PlaybackMode) {
+        this.mode = mode
+        order?.mode = mode
     }
 
     /** Home selections are temporary, single-track playlists using the same playback pipeline. */
@@ -81,10 +84,7 @@ internal class PlaylistPlaybackController(
         }
         require(startIndex in snapshot.indices)
         tracks = snapshot.toList()
-        SequentialOrder.initialize(tracks.size)
-        val order = (listOf(startIndex) + tracks.indices.filter { it != startIndex }.shuffled()).toIntArray()
-        ShuffleOrder.initialize(order)
-        RepeatOneOrder.initialize(order)
+        order = PlaybackOrder(tracks.size, startIndex, mode)
         updateSource(sourcePlaylistId)
         playResolvedIndex(startIndex)
     }
@@ -92,28 +92,29 @@ internal class PlaylistPlaybackController(
     fun playQueueIndex(selectedIndex: Int) {
         if (selectedIndex !in tracks.indices) return
         cancelRequest()
-        if (selectedIndex == activeOrder.index) return
+        if (selectedIndex == order?.index) return
         playResolvedIndex(selectedIndex)
     }
 
     fun next() {
         cancelRequest()
-        playResolvedIndex(activeOrder.next())
+        playResolvedIndex(order?.next())
     }
 
     fun previous() {
         cancelRequest()
-        playResolvedIndex(activeOrder.previous())
+        playResolvedIndex(order?.previous())
     }
 
     fun onCompleted() {
         if (!loopEnabled || tracks.isEmpty()) return
-        playResolvedIndex(activeOrder.step())
+        playResolvedIndex(order?.step())
     }
 
     private fun playResolvedIndex(target: Int?) {
+        val currentOrder = order ?: return
         if (target == null || target !in tracks.indices) return
-        orders.forEach { it.syncIndex(target) }
+        currentOrder.select(target)
         loopEnabled = true
         onQueueChanged(tracks, target)
         onPlay(tracks[target])
@@ -128,7 +129,7 @@ internal class PlaylistPlaybackController(
         stopLoop()
         tracks = emptyList()
         currentPlaylistId = null
-        orders.forEach { it.reset() }
+        order = null
     }
 
     fun cancelRequest() {

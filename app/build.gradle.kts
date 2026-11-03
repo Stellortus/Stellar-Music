@@ -36,8 +36,8 @@ android {
         applicationId = "top.stellortus.stellarmusic"
         minSdk = 24
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.8"
+        versionCode = 9
+        versionName = "0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,8 +51,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -109,4 +109,5 @@ dependencies {
     implementation(libs.nextoast)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.stellar.music.common)
+    implementation(libs.smooth.kotlin)
 }

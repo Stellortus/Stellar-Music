@@ -1,12 +1,14 @@
 package top.stellortus.stellar_music
 
-import kotlinx.coroutines.*
-import org.junit.Assert.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 import top.stellortus.stellar_music.ui.player.PlaylistPlaybackController
-import top.stellortus.stellar_music.ui.player.RepeatOneOrder
-import top.stellortus.stellar_music.ui.player.SequentialOrder
-import top.stellortus.stellar_music.ui.player.ShuffleOrder
 import top.stellortus.stellar_music_common.dto.Track
 
 class PlaylistPlaybackControllerTest {
@@ -83,12 +85,11 @@ class PlaylistPlaybackControllerTest {
     }
 
     @Test
-    fun manualNavigationWrapsAndSynchronizesAllOrdersWithOnePlaybackPerAction() = runBlocking {
+    fun manualNavigationWrapsAndPublishesTheIndexBeforeEachPlayback() = runBlocking {
         val played = mutableListOf<Int>()
         val selected = mutableListOf<Int>()
-        val orders = listOf(SequentialOrder, ShuffleOrder, RepeatOneOrder)
         val controller = PlaylistPlaybackController(this, { emptyList() }, {
-            assertTrue(orders.all { order -> order.index == it.id - 1 })
+            assertEquals(it.id - 1, selected.last())
             played += it.id
         }, { fail(it) }, { _, index -> selected += index })
         controller.playPlaylist(listOf(track(1), track(2), track(3)), 1)
@@ -138,7 +139,7 @@ class PlaylistPlaybackControllerTest {
     }
 
     @Test
-    fun releaseClearsAllOrdersAndRejectsLateLoadsBeforeAnewSessionStarts() = runBlocking {
+    fun releaseClearsTheQueueAndRejectsLateLoadsBeforeAnewSessionStarts() = runBlocking {
         val response = CompletableDeferred<List<Track>>()
         val played = mutableListOf<Int>()
         val controller = PlaylistPlaybackController(this,
@@ -153,13 +154,6 @@ class PlaylistPlaybackControllerTest {
         controller.next()
         controller.previous()
         assertEquals(listOf(1), played)
-        listOf(SequentialOrder, ShuffleOrder, RepeatOneOrder).forEach {
-            assertEquals(-1, it.index)
-            assertNull(it.step())
-            assertNull(it.next())
-            assertNull(it.previous())
-        }
-
         val nextSession = PlaylistPlaybackController(this, { emptyList() }, { played += it.id }, { fail(it) })
         nextSession.play(track(3))
         nextSession.onCompleted()

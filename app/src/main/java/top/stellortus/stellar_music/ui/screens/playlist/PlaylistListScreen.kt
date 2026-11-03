@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
+import top.stellortus.smooth_kotlin.ifMeets
+import top.stellortus.smooth_kotlin.thenTake
 import top.stellortus.stellar_music.ui.LocalAuthPreferences
 import top.stellortus.stellar_music.db.manager.PlaylistManager
 import top.stellortus.stellar_music.utils.ToastManager
@@ -171,8 +173,9 @@ fun PlaylistListScreen(
                                                         UpdatePlaylistRequest(public = !playlist.public))
                                                 }.handlePlaylistChange(
                                                     onCommitted = { needsRefresh ->
-                                                        playlists = playlists.map {
-                                                            if (it.id == playlist.id) it.copy(public = !playlist.public) else it
+                                                        playlists = playlists.map { item ->
+                                                            item.ifMeets { it.id == playlist.id }
+                                                                .thenTake { item.copy(public = !playlist.public) }
                                                         }
                                                         reloadAfterChange(needsRefresh)
                                                     },

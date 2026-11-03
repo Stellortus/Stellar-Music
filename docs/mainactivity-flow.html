@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Stellar Music · MainActivity 之后的执行流程</title>
+  <style>
+    :root { color-scheme: light dark; --reading-size: 18px; --bg: light-dark(#fafaf8, #181b20); --fg: light-dark(#202c35, #e3e9ed); --muted: light-dark(#52616b, #b0bec8); --line: light-dark(#cdd6da, #48545f); --accent: light-dark(#176775, #83ccd7); --surface: light-dark(#edf3f4, #242f37); }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, "Microsoft YaHei", sans-serif; font-size: var(--reading-size); line-height: 1.8; overflow-wrap: anywhere; }
+    main { max-width: 1080px; margin: auto; padding: 2rem clamp(12px, 4vw, 48px) 4rem; }
+    h1 { margin: 0; font-size: 1.8em; line-height: 1.4; }
+    h2 { margin: 0 0 .7em; font-size: 1.35em; line-height: 1.5; }
+    h3 { font-size: 1.05em; margin: 1em 0 .3em; }
+    p { margin: .6em 0; }
+    a { color: var(--accent); text-underline-offset: .2em; }
+    code { font-family: Consolas, "Cascadia Code", monospace; font-size: .9em; }
+    .intro, .note, footer { color: var(--muted); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: .6em; align-items: center; margin: 1.3em 0 .8em; }
+    button { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: .35em .75em; min-height: 44px; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    nav { display: flex; flex-wrap: wrap; column-gap: 1.3em; row-gap: .35em; margin: 1em 0 2em; }
+    section { margin: 2em 0; padding-top: 1em; border-top: 1px solid var(--line); }
+    .overview { background: var(--surface); padding: .7em 1em; margin: 1em 0; border-radius: 6px; }
+    .tree, .tree ul { list-style: none; margin: 0; padding-left: 1.2em; }
+    .tree { padding-left: 0; }
+    .tree > li { margin: .8em 0; }
+    .tree ul { margin: .45em 0 .7em .4em; border-left: 1px solid var(--line); }
+    .tree ul > li { position: relative; margin: .45em 0; }
+    .tree ul > li::before { content: ""; position: absolute; top: .9em; left: -1.2em; width: .85em; border-top: 1px solid var(--line); }
+    summary { cursor: pointer; font-weight: 600; }
+    summary:hover { color: var(--accent); }
+    summary .tag { font-weight: 400; }
+    .tag { display: inline-block; font-size: .78em; color: var(--muted); margin-right: .5em; border: 1px solid var(--line); border-radius: 4px; padding: 0 .4em; vertical-align: .1em; }
+    .source { font-size: .85em; color: var(--muted); margin: 1em 0; }
+    .source a { display: inline-block; margin-right: 1em; }
+    footer { font-size: .85em; margin-top: 2em; border-top: 1px solid var(--line); padding-top: 1em; }
+    @media (max-width: 480px) { main { padding-top: 1.2rem; } h1 { font-size: 1.5em; } .tree ul { padding-left: .85em; margin-left: .15em; } .tree ul > li::before { left: -.85em; width: .6em; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print { .toolbar, nav, .reading-help { display: none; } main { max-width: none; padding: 0; } body { --reading-size: 12pt; } section { break-before: page; } a { color: inherit; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MainActivity 之后，程序发生了什么？</h1>
+    <p class="intro">Stellar Music 执行流程思维导图 · 根据 2026-11-02 的当前源码整理</p>
+    <p class="reading-help">从上到下阅读四棵树。点击分支标题可展开或折叠；同一父节点下，只有标注“顺序”的步骤保证依次执行，异步任务可能交错。</p>
+    <div class="toolbar" role="group" aria-label="阅读设置">
+      <button type="button" id="expand-all">全部展开</button>
+      <button type="button" id="collapse-all">全部折叠</button>
+      <button type="button" id="font-down" aria-label="缩小字号">字号 −</button>
+      <output id="font-size" aria-live="polite" aria-label="当前字号">18px</output>
+      <button type="button" id="font-up" aria-label="放大字号">字号 ＋</button>
+    </div>
+    <nav aria-label="章节导航">
+      <a href="#startup">01 启动与登录</a><a href="#screens">02 主界面与页面</a><a href="#playback">03 统一播放流程</a><a href="#infrastructure">04 缓存与生命周期</a>
+    </nav>
+    <div class="overview">主线：<code>MainActivity.onCreate()</code> → <code>MusicApp()</code> 判断登录 → <code>MainScreen()</code> 创建播放器与页面 → 用户操作 → 状态更新 → Compose 更新相关界面。</div>
+  </header>
+
+  <section id="startup" aria-labelledby="startup-title">
+    <h2 id="startup-title">01 · 启动与登录</h2>
+    <ul class="tree">
+      <li><details open><summary><span class="tag">自动 · 顺序</span>MainActivity.onCreate()：准备应用基础环境</summary><ul>
+        <li><code>super.onCreate(savedInstanceState)</code>：执行 Activity 基类初始化。</li>
+        <li><code>ToastManager.init(applicationContext)</code>：保存 Toast 所需的应用 Context。</li>
+        <li><code>AuthPreferences.init(applicationContext)</code>：准备登录信息的 SharedPreferences。</li>
+        <li><code>TrackManager.init()</code>、<code>PlaylistManager.init()</code>：构建各自的 Room 数据库实例；这里没有发起歌曲或歌单网络请求。</li>
+        <li><code>enableEdgeToEdge()</code>：启用内容延伸到系统栏区域的布局方式。</li>
+        <li><code>setContent { … }</code>：开始构建 Compose 界面。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">自动</span>setContent：建立 Compose 根节点</summary><ul>
+        <li><code>CompositionLocalProvider(LocalAuthPreferences provides AuthPreferences)</code>：让子组件可通过 CompositionLocal 获取登录信息对象。</li>
+        <li><code>StellarMusicTheme</code>：提供颜色、字体、形状和间距等主题配置。</li>
+        <li><code>MusicApp()</code>：管理根登录状态，并决定显示哪个页面。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">自动</span>MusicApp：先根据本地登录信息决定初始画面</summary><ul>
+        <li>有非空 token、存在 userId，且 <code>sessionExpired == false</code> → <code>Authenticated</code> → 立即显示主界面。</li>
+        <li>其他情况 → <code>Loading</code> → 显示“正在登录…”。</li>
+        <li>因此，本地信息完整时，主页可以先出现，服务器登录校验随后异步完成。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">自动 · 异步</span>LaunchedEffect(verifyAttempt)：向服务器校验登录</summary><ul>
+        <li>没有 token → <code>clearSession()</code> → <code>Unauthenticated</code> → 显示登录／注册页面。</li>
+        <li>有 token → 记录当前 token → 调用 <code>AuthApi.me()</code>；缺少 userId 时保持加载画面。</li>
+        <li><details open><summary>校验成功</summary><ul>
+          <li>如果 token 已改变或会话已失效，忽略本次结果，避免旧响应覆盖新会话。</li>
+          <li>如果原 userId 与服务器返回的 id 不同，先显示加载状态，并清理原账号的歌曲、歌单缓存。</li>
+          <li>再次确认 token 和会话状态 → 保存 username、userId → 两个 Manager 调用 <code>startSession()</code> → 显示主界面。</li>
+        </ul></details></li>
+        <li><details open><summary>校验失败</summary><ul>
+          <li>协程取消 → 继续抛出 <code>CancellationException</code>。</li>
+          <li>token 已改变 → 忽略旧请求错误。</li>
+          <li>401 → Toast 提示登录失效 → 设置 <code>sessionExpired = true</code>。</li>
+          <li>其他错误 → Toast 提示；本地仍有 token 和 userId 时保留主界面，否则显示 <code>NetworkErrorScreen</code>。</li>
+          <li>网络错误页：点击“重试”增加 <code>verifyAttempt</code>，重新校验；点击“进入登录页”触发会话清理。</li>
+        </ul></details></li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">用户操作</span>登录／注册成功：保存新会话，再进入主页</summary><ul>
+        <li>校验表单 → 调用 <code>AuthApi.login()</code> 或 <code>AuthApi.register()</code>。</li>
+        <li><code>saveAuth()</code>：先清理旧会话 → 保存 token、userId、username → 两个 Manager 启动会话。</li>
+        <li><code>onLoggedIn</code>：切换到 <code>Authenticated</code>，并增加 <code>verifyAttempt</code>，再执行一次服务器校验。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">持续监听</span>LaunchedEffect(Unit)：处理会话失效与退出登录</summary><ul>
+        <li>持续收集 <code>AuthPreferences.sessionExpired</code>。</li>
+        <li>收到 true → 切换为 Loading → <code>clearSession()</code> → 切换为 Unauthenticated。</li>
+        <li><code>clearSession()</code> 在 <code>NonCancellable</code> 中执行：取消并等待 Manager 任务结束 → 清空两个 Room 缓存 → 清空登录信息 → 将失效标记重置为 false。</li>
+        <li>主界面退出组合时，其播放器通过 <code>onDispose</code> 释放，详见第 04 部分。</li>
+      </ul></details></li>
+    </ul>
+    <p class="source">源码：<a href="../app/src/main/java/top/stellortus/stellar_music/MainActivity.kt">MainActivity.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/data/AuthPreferences.kt">AuthPreferences.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/screens/account/AccountScreen.kt">AccountScreen.kt</a></p>
+  </section>
+
+  <section id="screens" aria-labelledby="screens-title">
+    <h2 id="screens-title">02 · 主界面与四个页面</h2>
+    <ul class="tree">
+      <li><details open><summary><span class="tag">进入主界面</span>MainScreen：创建公共状态与布局</summary><ul>
+        <li>默认选中 <code>HomeTab</code>；通过 <code>remember</code> 创建一份 <code>MusicPlayerState</code>，内部创建播放控制器和 ExoPlayer。</li>
+        <li>初始 <code>currentTrack == null</code>，不自动播放，底部播放器条暂不显示。</li>
+        <li><code>queueVisible</code> 用 <code>rememberSaveable</code> 保存播放列表的显示状态。</li>
+        <li><code>PlaybackQueueHost</code> 包住 <code>StellarScaffold</code>；Scaffold 底部依次放播放器条和导航栏。</li>
+        <li>点击底部导航 → 关闭播放列表浮层 → 更新选中项 → 显示对应页面；播放器对象保留。</li>
+        <li>监听 <code>playbackError</code> → Toast 显示错误 → 清空错误状态，避免重复提示。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">自动检查 · 用户确认下载</span>AppUpdatePrompt：检查应用更新</summary><ul>
+        <li>进入该组合后，异步查询最新版本号，与 <code>BuildConfig.VERSION_CODE</code> 比较。</li>
+        <li>版本较新 → 获取版本名称 → 显示更新弹窗；无效版本号或检查失败写入日志。</li>
+        <li>点击“立即更新” → 在 IO 中交给系统 <code>DownloadManager</code> 下载 APK → Toast 提示并关闭弹窗。</li>
+        <li>下载完成后由用户从系统通知打开安装包；点击“暂不更新”只关闭弹窗。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">首页</span>HomeScreen：歌曲加载、搜索与点播</summary><ul>
+        <li><details open><summary>自动加载与分页</summary><ul>
+          <li><code>LaunchedEffect(retryTick)</code> 从偏移 0 开始，通过 <code>TrackManager.getMusicList()</code> 获取首批歌曲。</li>
+          <li>加载成功 → 显示歌曲列表并更新偏移；失败 → Toast 提示并提供重试。</li>
+          <li><code>snapshotFlow</code> 监听列表末项进入可见区域 → 请求下一页；通过加载状态和结束标记避免重复请求。</li>
+          <li>按歌曲 id 排除已有数据；空页或没有新歌曲时标记结束。一页不满屏时可继续补下一页。</li>
+        </ul></details></li>
+        <li><details open><summary>搜索、点击和长按</summary><ul>
+          <li>提交非空关键词 → 更新 <code>TrackSearchState</code> → 显示搜索页 → 调用歌曲搜索接口。</li>
+          <li>搜索状态由泛型 <code>SearchState&lt;Track&gt;</code> 管理：关键词、结果、加载、失败、取消和响应版本判断。</li>
+          <li>返回首页会取消当前搜索；失败可以重试。</li>
+          <li>点击首页或搜索结果中的歌曲 → <code>player.play(track)</code> → 创建大小为 1 的临时队列，进入统一播放流程。</li>
+          <li>长按歌曲 → <code>TrackDetails</code> → 可打开 <code>AddToPlaylistDialog</code>，选择目标歌单并添加歌曲。</li>
+        </ul></details></li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">歌单</span>PlaylistScreen：列表、搜索和详情</summary><ul>
+        <li><code>NavHost</code> 管理歌单列表、歌单搜索、歌单详情；搜索状态和列表滚动状态由外层保存。</li>
+        <li>列表进入后通过 <code>PlaylistManager.listPlaylists()</code> 加载歌单；搜索通过 <code>PlaylistSearchState</code> 调用歌单搜索接口。</li>
+        <li>点击歌单名称／条目进入详情；点击播放封面调用 <code>player.togglePlaylist(id)</code>。</li>
+        <li>详情通过 <code>getPlaylist(id)</code> 加载歌曲，UI 按歌曲 id 去重。</li>
+        <li>详情点击歌曲 → 将完整歌曲列表、所选 index 和歌单 id 传给 <code>playPlaylist()</code>，从该歌曲开始播放。</li>
+        <li>详情点击播放封面 → 使用已加载列表调用 <code>togglePlaylist()</code>。</li>
+        <li>按权限提供创建、重命名、删除、公开状态切换和添加歌曲操作。</li>
+        <li>添加歌曲候选通过 <code>TrackManager.getAllMusicList()</code> 分页获取，默认最多 500 首，并排除歌单已有歌曲。</li>
+        <li>重命名请求将 <code>public</code> 留空，由 Manager 获取最新公开状态后提交，避免使用过期值。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">上传</span>UploadScreen：用户选择后才执行上传</summary><ul>
+        <li>点击“选择音乐文件” → 系统文件选择器筛选 <code>audio/*</code>；取消选择则直接返回。</li>
+        <li>选中文件 → Uploading → 在 IO 中把 URI 内容复制到应用缓存目录 → <code>NetworkService.upload(file)</code>。</li>
+        <li>成功显示文件名；失败 Toast 提示；进入上传请求后通过 <code>finally</code> 删除临时文件。</li>
+        <li>外层 <code>finally</code> 将仍处于 Uploading 的状态还原为 Idle；上传期间禁用选择按钮。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">个人</span>ProfileScreen：展示账号与退出</summary><ul>
+        <li>展示当前 username、userId 和应用版本。</li>
+        <li>点击退出 → 调用登出接口 → 成功后触发 <code>onLogout()</code> → 设置会话失效标记，由根节点统一清理并回到登录页。</li>
+        <li>登出请求失败 → 提示错误，保留当前页面。</li>
+      </ul></details></li>
+    </ul>
+    <p class="note">切换底部标签页时，公共播放器保留；被移出组合的页面，其 remember 状态与页面协程通常随之销毁。页面内导航保存的状态取决于对应 NavHost 和外层状态的生命周期。</p>
+    <p class="source">源码：<a href="../app/src/main/java/top/stellortus/stellar_music/ui/screens/HomeScreen.kt">HomeScreen.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/screens/PlaylistScreen.kt">PlaylistScreen.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/components/AppUpdatePrompt.kt">AppUpdatePrompt.kt</a></p>
+  </section>
+
+  <section id="playback" aria-labelledby="playback-title">
+    <h2 id="playback-title">03 · 统一播放流程</h2>
+    <div class="overview">调用链：UI → <code>MusicPlayerState</code> → <code>PlaylistPlaybackController</code> → <code>startTrack()</code> → <code>StreamPlayer</code> → ExoPlayer。播放器回调再更新 Compose 状态。</div>
+    <ul class="tree">
+      <li><details open><summary><span class="tag">用户操作</span>MusicPlayerState：接收统一的播放入口</summary><ul>
+        <li>首页 <code>play(track)</code> → 控制器转为 <code>playPlaylist(listOf(track), 0, null)</code>；临时队列仅在当前播放会话中存在，不创建服务器歌单。</li>
+        <li>歌单歌曲 <code>playPlaylist(tracks, index, sourcePlaylistId)</code> → 使用原歌单的歌曲快照与所选位置。</li>
+        <li><code>togglePlaylist(id, snapshot)</code>：如果正在播放这个来源歌单，就切换暂停／继续；否则使用快照或按 id 加载后播放。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">控制逻辑</span>PlaylistPlaybackController：管理队列、请求和播放顺序</summary><ul>
+        <li><code>cancelRequest()</code>：增加 revision、取消旧 Job 并清空引用；异步返回时核对 revision，防止先前选择覆盖最新选择。</li>
+        <li>如果需要远程加载歌单，加载期间保留原播放；加载失败提示错误。</li>
+        <li><code>startPlaylist()</code>：空列表提示错误并保留原播放；有效列表复制为本次播放快照。</li>
+        <li>初始化 <code>SequentialOrder</code> 的大小，以及 <code>ShuffleOrder</code>、<code>RepeatOneOrder</code> 各自保存的固定排列。</li>
+        <li>随机排列以起播歌曲开头，其余索引打乱一次；两个排列策略各保存数组副本，后续切歌不累积历史。</li>
+        <li>保存来源歌单 id → 调用 <code>playResolvedIndex(startIndex)</code>。</li>
+        <li><code>playResolvedIndex(target)</code>：校验索引 → 同步三个策略的 index → 启用自动续播 → 发布队列与当前索引 → 调用 <code>onPlay(track)</code>。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">当前默认</span>SequentialOrder：顺序循环；另外两个策略已准备</summary><ul>
+        <li>当前 <code>activeOrder</code> 固定为 <code>SequentialOrder</code>，没有播放顺序切换按钮。</li>
+        <li><code>next()</code>：<code>(index + 1) % size</code>；<code>previous()</code>：<code>(index - 1 + size) % size</code>。</li>
+        <li><code>step()</code> 用于自然播放结束，顺序循环中等同于 <code>next()</code>；大小为 1 的队列会重复播放同一首。</li>
+        <li><code>ShuffleOrder</code>：next／previous 沿固定 order 前后移动，首尾循环，step 同 next。</li>
+        <li><code>RepeatOneOrder</code>：手动前后切换沿固定排列；step 返回当前索引，重复当前歌曲。</li>
+        <li>策略函数只计算目标索引；真正同步 index、更新队列高亮和开始播放都由控制器统一提交。</li>
+        <li>控制器已有手动 next／previous 方法，当前页面没有新增对应按钮或模式切换入口。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">开始播放</span>startTrack → StreamPlayer → ExoPlayer</summary><ul>
+        <li><code>MusicPlayerState.startTrack()</code>：更新 currentTrack，清零位置和时长，清空拖动预览与错误。</li>
+        <li><code>StreamPlayer.play(track.id)</code>：从歌曲 id 构造播放 URI → <code>setMediaItem()</code> → <code>prepare()</code> → <code>play()</code>。</li>
+        <li>音频通过带认证的流数据源读取；媒体缓存由 <code>StreamCache</code> 提供。</li>
+        <li><code>onPlayWhenReadyChanged</code> 更新“用户是否要求播放”；<code>onIsPlayingChanged</code> 更新“目前是否实际播放”。缓冲时两者可能不同。</li>
+        <li>实际播放时每 250ms 回传当前位置和时长；停止实际播放时取消进度循环。</li>
+        <li>这些 Compose 可观察状态改变后，相关 UI 更新：歌曲信息、播放图标、封面动画、进度和队列高亮。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">用户操作</span>暂停、进度拖动和当前播放列表</summary><ul>
+        <li>暂停／继续 → <code>MusicPlayerState.togglePause()</code> → <code>StreamPlayer.togglePause()</code>；如播放器存在错误，继续播放前会重新 prepare。</li>
+        <li>拖动进度 → <code>onSeekPreview()</code> 只更新预览位置；松手 → <code>onSeekFinished()</code> 才真正 seek。</li>
+        <li>实际进度与目标差值小于 1000ms 时清掉预览，恢复显示实际进度。</li>
+        <li><details open><summary>上滑显示播放列表的机制</summary><ul>
+          <li>手势区域是播放器中的歌曲标题／歌手区域；累计向上拖动达到 48dp 后调用 <code>onOpenQueue()</code>。</li>
+          <li>回调把 <code>queueVisible</code> 设为 true；进度 SeekBar 本身负责拖动进度。</li>
+          <li><code>PlaybackQueueHost</code> 依据测量到的播放器顶部与根布局位置，在播放器上方放置列表；高度不超过根布局的 65%，且受可用空间限制。</li>
+          <li>列表底部使用 <code>StellarTheme.spacing.page</code> 留出与播放器的间距。</li>
+          <li>列表滑入／滑出、背景遮罩淡入／淡出均使用 240ms 动画。</li>
+          <li><code>PlaybackQueueSheet</code> 显示队列，初始定位当前歌曲；点击其他歌曲索引切歌并保持列表打开。</li>
+          <li>点击当前索引不重新播放，但会取消待完成的歌单选择请求。</li>
+          <li>标题区域向下拖动 48dp、点击遮罩或按返回键 → 关闭列表。</li>
+        </ul></details></li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">播放器回调</span>自然结束与播放错误</summary><ul>
+        <li>ExoPlayer 到达 <code>STATE_ENDED</code> → 停止进度循环 → 回调 <code>onCompleted()</code>。</li>
+        <li>MusicPlayerState 清理播放位置和拖动预览 → 控制器在自动续播启用且队列非空时，调用 <code>activeOrder.step()</code>。</li>
+        <li>得到目标索引 → 再次走 <code>playResolvedIndex()</code> → 同步状态并播放下一首；默认顺序首尾循环。</li>
+        <li>播放器出错 → 暂停、停止进度循环、更新播放状态 → <code>stopLoop()</code> 停止自动续播 → 发布错误供 MainScreen 提示。</li>
+        <li>后续通过有效的队列播放操作提交歌曲时，控制器会重新启用自动续播。</li>
+      </ul></details></li>
+    </ul>
+    <p class="source">源码：<a href="../app/src/main/java/top/stellortus/stellar_music/ui/player/MusicPlayerState.kt">MusicPlayerState.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/player/PlaylistPlaybackController.kt">PlaylistPlaybackController.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/player/PlaybackOrder.kt">PlaybackOrder.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/StreamPlayer.kt">StreamPlayer.kt</a></p>
+  </section>
+
+  <section id="infrastructure" aria-labelledby="infrastructure-title">
+    <h2 id="infrastructure-title">04 · 网络、缓存与生命周期</h2>
+    <ul class="tree">
+      <li><details open><summary><span class="tag">按请求触发</span>网络认证与错误传递</summary><ul>
+        <li>业务 API 通过 Ktor 客户端请求；认证插件在需要时添加 <code>Authorization: Bearer …</code>。</li>
+        <li><code>ensureSuccess()</code> 对非 2xx 抛出 <code>ApiException</code>；401 请求所用认证仍对应当前 token 时，标记会话失效。</li>
+        <li>根节点监听到失效后统一清理会话，避免每个业务页面自行跳转登录。</li>
+        <li>音频使用单独的 <code>AuthStreamDataSource</code> 与 OkHttp 认证拦截器；不经过业务 API 的同一套 401 处理函数。</li>
+        <li>应用更新查询使用不携带业务认证的请求。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">读取数据</span>Room 元数据缓存：TrackManager 与 PlaylistManager</summary><ul>
+        <li>歌曲分页存入 tracks.db，歌单列表和详情存入 playlists.db；保存的是业务数据的 JSON，不是音频文件。</li>
+        <li><details open><summary>普通读取 readCached()</summary><ul>
+          <li>先查询 Room；有缓存则立即返回旧快照，同时启动会话作用域内的后台同步。</li>
+          <li>没有缓存则等待同步完成，再从 Room 读取保存后的结果。</li>
+          <li>同一个 key 的同步任务通过 <code>pending</code> 共享；互斥锁协调读写请求。</li>
+          <li>任务完成后，在锁内确认映射仍是自己，再移除对应 key；后台非取消错误写入日志。</li>
+          <li>后台写入缓存不会直接替换页面已经持有的普通列表快照；页面再次读取时才能拿到更新值。</li>
+        </ul></details></li>
+        <li><details open><summary>明确刷新 readFresh()</summary><ul>
+          <li><code>forceRefresh = true</code> 时使用：等待网络获取 → 写入 Room → 读回保存结果。</li>
+          <li>与歌单修改使用同一个互斥锁；刷新失败抛出错误，不返回旧缓存伪装成功。</li>
+          <li>页面保留强制刷新标记，直到一次刷新成功后再清除。</li>
+        </ul></details></li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">用户修改</span>歌单变更：服务端结果与本地同步</summary><ul>
+        <li>Manager 在会话作用域内通过互斥锁串行处理修改；执行服务端操作后更新本地歌单缓存。</li>
+        <li><code>handlePlaylistChange()</code> 统一处理操作结果。</li>
+        <li>全部成功 → 关闭对应操作弹窗并刷新显示。</li>
+        <li>普通请求失败 → 提示错误，保留可重试的操作界面。</li>
+        <li>服务端操作成功但缓存同步失败 → 报告“操作已成功，列表同步失败，请稍后刷新” → 按已提交处理关闭弹窗，并要求后续强制刷新。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">异步任务</span>取消与过期结果保护</summary><ul>
+        <li><code>runCatchingCancellable()</code> 保留普通异常为 Result，但继续抛出取消异常，并在执行前后检查协程是否有效。</li>
+        <li>各提交／加载流程通过 <code>finally</code> 复位 loading、submitting 等状态。</li>
+        <li>SearchState 与播放控制器除了取消 Job，还使用 revision 校验，防止过期请求回写新状态。</li>
+        <li>页面离开组合会取消其页面协程；Manager 的缓存同步和修改任务属于会话作用域，可能继续执行。</li>
+        <li>退出会话时 Manager 取消并等待这些任务，再清空数据库，防止旧任务之后写回。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">音频数据</span>StreamCache：独立的媒体缓存</summary><ul>
+        <li>播放器构建数据源时创建或复用进程内的 <code>SimpleCache</code> 单例。</li>
+        <li>目录为应用 <code>cacheDir/track_cache</code>，使用 LRU 淘汰，容量上限 512MiB。</li>
+        <li>数据源优先使用媒体缓存，缺失部分从带认证的上游流读取。</li>
+        <li>这部分与 Room 元数据缓存分开；当前 <code>clearSession()</code> 没有清理它，播放器 release 也没有显式释放该单例。</li>
+      </ul></details></li>
+      <li><details open><summary><span class="tag">离开主界面</span>DisposableEffect.onDispose：释放播放资源</summary><ul>
+        <li><code>MusicPlayerState.release()</code> → 控制器取消待加载请求、关闭自动续播、清空内部队列和来源、重置三个策略。</li>
+        <li>取消 MusicPlayerState 自己的协程作用域。</li>
+        <li><code>StreamPlayer.release()</code> → 取消进度任务与自身作用域 → <code>ExoPlayer.release()</code>。</li>
+        <li>触发条件是 MainScreen 退出组合，例如登录状态变为 Loading／Unauthenticated，或 Activity 的组合被销毁。</li>
+        <li>当前没有在 MainActivity 中额外实现 <code>onStop()</code> 暂停逻辑；仅仅切到后台不等同于执行上述 onDispose。</li>
+      </ul></details></li>
+    </ul>
+    <p class="source">源码：<a href="../app/src/main/java/top/stellortus/stellar_music/db/CacheDao.kt">CacheDao.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/db/manager/PlaylistManager.kt">PlaylistManager.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/ui/screens/SearchState.kt">SearchState.kt</a><a href="../app/src/main/java/top/stellortus/stellar_music/network/StreamCache.kt">StreamCache.kt</a></p>
+  </section>
+  <footer>阅读说明：这是当前实现的结构与主要运行路径，不是每一帧的调用栈。Compose 状态变化会触发相关部分重组；remember 对象在对应组合生命周期内保留，LaunchedEffect 在进入组合或 key 改变时启动。文档无外部依赖，可直接双击离线阅读；源码链接相对于本文件所在目录。</footer>
+</main>
+<script>
+  (() => {
+    const branches = document.querySelectorAll('main details');
+    const down = document.getElementById('font-down');
+    const up = document.getElementById('font-up');
+    const sizeLabel = document.getElementById('font-size');
+    let size = 18;
+    document.getElementById('expand-all').addEventListener('click', () => {
+      branches.forEach(branch => { branch.open = true; });
+    });
+    document.getElementById('collapse-all').addEventListener('click', () => {
+      branches.forEach(branch => { branch.open = false; });
+    });
+    function setSize(nextSize) {
+      size = Math.max(16, Math.min(28, nextSize));
+      document.documentElement.style.setProperty('--reading-size', `${size}px`);
+      sizeLabel.textContent = `${size}px`;
+      down.disabled = size === 16;
+      up.disabled = size === 28;
+    }
+    down.addEventListener('click', () => setSize(size - 2));
+    up.addEventListener('click', () => setSize(size + 2));
+  })();
+</script>
+</body>
+</html>
