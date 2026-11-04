@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -71,7 +72,10 @@ class MusicPlayerState(context: Context) {
     var queueTracks: List<Track> by mutableStateOf(emptyList())
         private set
 
-    var currentQueueIndex: Int by mutableStateOf(-1)
+    var currentQueueIndex: Int by mutableIntStateOf(-1)
+        private set
+
+    var playbackMode: PlaybackMode by mutableStateOf(playlistPlayback.mode)
         private set
 
     var isPlaying: Boolean by mutableStateOf(false)
@@ -104,6 +108,15 @@ class MusicPlayerState(context: Context) {
         playlistPlayback.togglePlaylist(playlistId, tracks)
 
     fun playQueueIndex(index: Int) = playlistPlayback.playQueueIndex(index)
+
+    fun next() = playlistPlayback.next()
+
+    fun previous() = playlistPlayback.previous()
+
+    fun cyclePlaybackMode() {
+        playlistPlayback.cycleMode()
+        playbackMode = playlistPlayback.mode
+    }
 
     private fun startTrack(track: Track) {
         currentTrack = track

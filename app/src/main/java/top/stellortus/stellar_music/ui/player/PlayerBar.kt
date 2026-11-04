@@ -17,5 +17,6 @@ fun PlayerBar(
     val track = state.currentTrack ?: return
     PlayerBarContent(track, state.isPlaying, state.dragPositionMs ?: state.positionMs, state.durationMs,
         state::togglePause, state::onSeekPreview, state::onSeekFinished, modifier,
-        onOpenQueue = onOpenQueue, cardAnchorModifier = queueAnchorModifier)
+        onOpenQueue = onOpenQueue, cardAnchorModifier = queueAnchorModifier,
+        onNextTrack = state::next, onPreviousTrack = state::previous)
 }

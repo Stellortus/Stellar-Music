@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,11 +22,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import top.stellortus.stellar_music.R
+import top.stellortus.stellar_music.ui.widgets.StellarIcon
+import top.stellortus.stellar_music.ui.widgets.StellarIconButton
 import top.stellortus.stellar_music.ui.widgets.StellarText
 import top.stellortus.stellar_music.ui.widgets.StellarTextRole
 import top.stellortus.stellar_music.ui.components.TrackItem
@@ -39,6 +46,8 @@ internal fun PlaybackQueueSheet(
     currentIndex: Int,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
+    playbackMode: PlaybackMode,
+    onCyclePlaybackMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -83,7 +92,33 @@ internal fun PlaybackQueueSheet(
                     Box(Modifier.size(32.dp, 4.dp)
                         .background(StellarTheme.colors.progressTrack, StellarTheme.shapes.item))
                 }
-                StellarText("当前播放列表（${tracks.size}）", role = StellarTextRole.ItemTitle)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(StellarTheme.spacing.gap),
+                ) {
+                    StellarText(
+                        "当前播放列表（${tracks.size}）",
+                        modifier = Modifier.weight(1f),
+                        role = StellarTextRole.ItemTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val (icon, label) = when (playbackMode) {
+                        PlaybackMode.Cyclic -> R.drawable.ic_repeat to "循环播放"
+                        PlaybackMode.Shuffle -> R.drawable.ic_shuffle to "随机播放"
+                        PlaybackMode.RepeatOne -> R.drawable.ic_repeat_one to "单曲循环"
+                    }
+                    StellarIconButton(
+                        onClick = onCyclePlaybackMode,
+                        modifier = Modifier.semantics {
+                            contentDescription = "切换播放模式"
+                            stateDescription = label
+                        },
+                    ) {
+                        StellarIcon(painterResource(icon), contentDescription = null)
+                    }
+                }
             }
             LazyColumn(
                 state = listState,

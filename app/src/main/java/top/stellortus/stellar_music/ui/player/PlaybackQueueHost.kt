@@ -41,6 +41,8 @@ internal fun PlaybackQueueHost(
     currentIndex: Int,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
+    playbackMode: PlaybackMode,
+    onCyclePlaybackMode: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (playerAnchorModifier: Modifier) -> Unit,
 ) {
@@ -83,8 +85,13 @@ internal fun PlaybackQueueHost(
                     exit = slideOutVertically(tween(240)) { it },
                 ) {
                     PlaybackQueueSheet(
-                        tracks, currentIndex, onSelect, onDismiss,
-                        Modifier
+                        tracks = tracks,
+                        currentIndex = currentIndex,
+                        onSelect = onSelect,
+                        onDismiss = onDismiss,
+                        playbackMode = playbackMode,
+                        onCyclePlaybackMode = onCyclePlaybackMode,
+                        modifier = Modifier
                             .fillMaxWidth()
                             .padding(
                                 start = StellarTheme.spacing.section,

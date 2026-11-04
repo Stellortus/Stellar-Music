@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import top.stellortus.smooth_kotlin.selectors.CyclicSelector
 import top.stellortus.stellar_music_common.dto.Track
 
 /** Owns the playback snapshot and rejects responses from superseded selections. */
@@ -25,12 +26,19 @@ internal class PlaylistPlaybackController(
     private var revision = 0
     private var order: PlaybackOrder? = null
 
-    var mode: PlaybackMode = PlaybackMode.Cyclic
-        private set
+    private val modeSelector = CyclicSelector(
+        listOf(PlaybackMode.Cyclic, PlaybackMode.Shuffle, PlaybackMode.RepeatOne),
+    )
+    val mode: PlaybackMode by modeSelector
 
     /** Changes future navigation without touching the playing track or pending requests. */
     fun changeMode(mode: PlaybackMode) {
-        this.mode = mode
+        modeSelector.index = modeSelector.values.indexOf(mode)
+        order?.mode = mode
+    }
+
+    fun cycleMode() {
+        modeSelector.stepForward()
         order?.mode = mode
     }
 

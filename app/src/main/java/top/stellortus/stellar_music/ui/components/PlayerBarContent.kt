@@ -5,9 +5,9 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +52,7 @@ import top.stellortus.stellar_music.ui.widgets.StellarText
 import top.stellortus.stellar_music.ui.widgets.StellarTextRole
 import top.stellortus.stellar_music.ui.widgets.StellarTone
 import top.stellortus.stellar_music_common.dto.Track
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -66,8 +67,12 @@ internal fun PlayerBarContent(
     modifier: Modifier = Modifier,
     onOpenQueue: () -> Unit = {},
     cardAnchorModifier: Modifier = Modifier,
+    onNextTrack: () -> Unit = {},
+    onPreviousTrack: () -> Unit = {},
 ) {
     val openQueue = rememberUpdatedState(onOpenQueue)
+    val nextTrack = rememberUpdatedState(onNextTrack)
+    val previousTrack = rememberUpdatedState(onPreviousTrack)
     val swipeThreshold = with(LocalDensity.current) { 48.dp.toPx() }
     val coverRotation = remember(track.id) { Animatable(0f) }
     val rotationDuration = StellarTheme.motion.coverRotationDurationMillis
@@ -128,22 +133,54 @@ internal fun PlayerBarContent(
                     Modifier
                         .weight(1f)
                         .semantics {
-                            customActions = listOf(CustomAccessibilityAction("打开当前播放列表") {
-                                openQueue.value()
-                                true
-                            })
+                            customActions = listOf(
+                                CustomAccessibilityAction("打开当前播放列表") {
+                                    openQueue.value()
+                                    true
+                                },
+                                CustomAccessibilityAction("上一首") {
+                                    previousTrack.value()
+                                    true
+                                },
+                                CustomAccessibilityAction("下一首") {
+                                    nextTrack.value()
+                                    true
+                                },
+                            )
                         }
                         .pointerInput(swipeThreshold) {
-                            var upwardDrag = 0f
-                            var opened = false
-                            detectVerticalDragGestures(
-                                onDragStart = { upwardDrag = 0f; opened = false },
-                                onVerticalDrag = { change, amount ->
+                            var drag = Offset.Zero
+                            var orientation: Orientation? = null
+                            var handled = false
+                            detectDragGestures(
+                                onDragStart = {
+                                    drag = Offset.Zero
+                                    orientation = null
+                                    handled = false
+                                },
+                                onDrag = { change, amount ->
                                     change.consume()
-                                    upwardDrag -= amount
-                                    if (!opened && upwardDrag >= swipeThreshold) {
-                                        opened = true
-                                        openQueue.value()
+                                    // The first delta arrives after touch slop; keep its axis
+                                    // until release, even if a track change recomposes this bar.
+                                    if (orientation == null && amount != Offset.Zero) {
+                                        orientation = if (abs(amount.x) > abs(amount.y)) {
+                                            Orientation.Horizontal
+                                        } else {
+                                            Orientation.Vertical
+                                        }
+                                    }
+                                    drag += amount
+                                    if (!handled) {
+                                        when {
+                                            orientation == Orientation.Horizontal && abs(drag.x) >= swipeThreshold -> {
+                                                handled = true
+                                                if (drag.x < 0f) nextTrack.value() else previousTrack.value()
+                                            }
+                                            orientation == Orientation.Vertical && -drag.y >= swipeThreshold -> {
+                                                handled = true
+                                                openQueue.value()
+                                            }
+                                        }
                                     }
                                 },
                             )

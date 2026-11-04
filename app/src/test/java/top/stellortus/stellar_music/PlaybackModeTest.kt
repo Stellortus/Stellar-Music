@@ -15,6 +15,42 @@ import top.stellortus.stellar_music_common.dto.Track
 class PlaybackModeTest {
     private fun track(id: Int) = Track(id, "歌曲$id", emptyList(), "$id.mp3", "", "", "", 0L)
 
+    @Test fun cyclingModesWrapsAndContinuesFromAnExplicitSelection() = runBlocking {
+        val controller = PlaylistPlaybackController(this, { emptyList() }, { fail("Unexpected playback") }, { fail(it) })
+        assertEquals(PlaybackMode.Cyclic, controller.mode)
+        repeat(2) {
+            listOf(PlaybackMode.Shuffle, PlaybackMode.RepeatOne, PlaybackMode.Cyclic).forEach { expected ->
+                controller.cycleMode()
+                assertEquals(expected, controller.mode)
+            }
+        }
+        controller.changeMode(PlaybackMode.Shuffle)
+        controller.cycleMode()
+        assertEquals(PlaybackMode.RepeatOne, controller.mode)
+        controller.changeMode(PlaybackMode.Cyclic)
+        controller.cycleMode()
+        assertEquals(PlaybackMode.Shuffle, controller.mode)
+        controller.release()
+    }
+
+    @Test fun cyclingModesUpdatesSubsequentCompletionWithoutRestartingPlayback() = runBlocking {
+        val played = mutableListOf<Int>()
+        val controller = PlaylistPlaybackController(this, { emptyList() }, { played += it.id }, { fail(it) })
+        controller.playPlaylist(listOf(track(1), track(2)))
+        controller.cycleMode()
+        assertEquals(listOf(1), played)
+        controller.onCompleted()
+        assertEquals(listOf(1, 2), played)
+        controller.cycleMode()
+        assertEquals(listOf(1, 2), played)
+        controller.onCompleted()
+        assertEquals(listOf(1, 2, 2), played)
+        controller.cycleMode()
+        controller.onCompleted()
+        assertEquals(listOf(1, 2, 2, 1), played)
+        controller.release()
+    }
+
     private data class PlaybackSnapshot(
         val positionMs: Long,
         val isPlaying: Boolean,
@@ -23,9 +59,9 @@ class PlaybackModeTest {
 
     @Test fun switchingModesPreservesPlayingPausedAndBufferingStateWithoutCallbacks() = runBlocking {
         val states = listOf(
-            PlaybackSnapshot(35000L, true, true),
-            PlaybackSnapshot(35000L, false, false),
-            PlaybackSnapshot(35000L, false, true),
+            PlaybackSnapshot(35000L, isPlaying = true, isPlaybackRequested = true),
+            PlaybackSnapshot(35000L, isPlaying = false, isPlaybackRequested = false),
+            PlaybackSnapshot(35000L, isPlaying = false, isPlaybackRequested = true),
         )
         for (state in states) {
             var playback: PlaybackSnapshot
@@ -48,8 +84,8 @@ class PlaybackModeTest {
             val originalQueue = queue
 
             repeat(2) {
-                PlaybackMode.entries.forEach { mode ->
-                    controller.changeMode(mode)
+                listOf(PlaybackMode.Shuffle, PlaybackMode.RepeatOne, PlaybackMode.Cyclic).forEach { mode ->
+                    controller.cycleMode()
                     controller.playQueueIndex(1)
                     assertEquals(mode, controller.mode)
                     assertEquals(state, playback)

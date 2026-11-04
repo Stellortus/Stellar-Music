@@ -182,6 +182,8 @@ private fun MainScreen(onLogout: () -> Unit) {
         currentIndex = playerState.currentQueueIndex,
         onSelect = playerState::playQueueIndex,
         onDismiss = { queueVisible = false },
+        playbackMode = playerState.playbackMode,
+        onCyclePlaybackMode = playerState::cyclePlaybackMode,
     ) { playerAnchorModifier ->
         StellarScaffold(
             modifier = Modifier.fillMaxSize(),

@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -18,6 +20,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyDescendant
@@ -44,7 +47,9 @@ import top.stellortus.stellar_music.ui.BottomTab
 import top.stellortus.stellar_music.ui.components.PlayerBarContent
 import top.stellortus.stellar_music.ui.components.StellarNavigationBar
 import top.stellortus.stellar_music.ui.player.PlaybackQueueHost
+import top.stellortus.stellar_music.ui.player.PlaylistPlaybackController
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
+import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music.ui.widgets.StellarScaffold
 import top.stellortus.stellar_music_common.dto.Track
 
@@ -53,8 +58,11 @@ class PlaybackQueueUiTest {
     private val tracks = (1..3).map { Track(it, "歌曲$it", listOf("歌手$it"), "$it.mp3", "", "", "", 0L) }
     private var opens = 0
     private var toggles = 0
+    private var nexts = 0
+    private var previous = 0
     private var seekFinishes = 0
     private var seekValue = 0f
+    private var panelBottomSpacingPx = 0
 
     private fun showPlayer(
         queue: List<Track> = tracks,
@@ -67,10 +75,25 @@ class PlaybackQueueUiTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 StellarMusicTheme(darkTheme = darkTheme) {
+                    val bottomSpacingPx = with(density) { StellarTheme.spacing.page.roundToPx() }
+                    SideEffect { panelBottomSpacingPx = bottomSpacingPx }
                     var visible by remember { mutableStateOf(initiallyOpen) }
                     var selected by remember { mutableIntStateOf(initialIndex) }
                     var tab by remember { mutableStateOf(BottomTab.HomeTab) }
-                    PlaybackQueueHost(visible, queue, selected, { selected = it }, { visible = false },
+                    val scope = rememberCoroutineScope()
+                    val controller = remember(queue) {
+                        PlaylistPlaybackController(
+                            scope, { emptyList() }, {}, { throw AssertionError(it) },
+                            onQueueChanged = { _, index -> selected = index },
+                        ).also { it.playPlaylist(queue, initialIndex) }
+                    }
+                    var playbackMode by remember { mutableStateOf(controller.mode) }
+                    PlaybackQueueHost(visible, queue, selected, controller::playQueueIndex, { visible = false },
+                        playbackMode = playbackMode,
+                        onCyclePlaybackMode = {
+                            controller.cycleMode()
+                            playbackMode = controller.mode
+                        },
                         modifier = Modifier.testTag("screen")) { anchor ->
                         StellarScaffold(
                             bottomBar = {
@@ -78,6 +101,8 @@ class PlaybackQueueUiTest {
                                     PlayerBarContent(queue[selected], false, 1000f, 100000f,
                                         { toggles++ }, { seekValue = it }, { seekFinishes++ },
                                         onOpenQueue = { opens++; visible = true },
+                                        onNextTrack = { nexts++; controller.next() },
+                                        onPreviousTrack = { previous++; controller.previous() },
                                         cardAnchorModifier = anchor.testTag("playerSurface"))
                                     Box(Modifier.testTag("navigation")) {
                                         StellarNavigationBar(tab) { visible = false; tab = it }
@@ -97,7 +122,150 @@ class PlaybackQueueUiTest {
         swipe(center, center - Offset(0f, distanceDp * compose.density.density), 400)
     }
 
+    private fun SemanticsNodeInteraction.dragHorizontally(distanceDp: Float) = performTouchInput {
+        swipe(center, center + Offset(distanceDp * compose.density.density, 0f), 400)
+    }
+
+    private fun playerText() = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions))
+
     private fun panel() = compose.onNodeWithContentDescription("当前播放列表面板")
+
+    private fun modeButton() = compose.onNodeWithContentDescription("切换播放模式")
+
+    private fun assertMode(label: String) {
+        modeButton().assertIsDisplayed().assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, label),
+        )
+    }
+
+    @Test fun titleAndArtistHorizontalSwipesNavigateInBothDirectionsAndWrap() {
+        showPlayer(initialIndex = 1)
+        compose.onNodeWithText("歌曲2").dragHorizontally(-100f)
+        compose.onNodeWithText("歌曲3").assertIsDisplayed()
+        compose.onNodeWithText("歌手3").dragHorizontally(100f)
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        compose.onNodeWithText("歌曲2").dragHorizontally(100f)
+        compose.onNodeWithText("歌曲1").assertIsDisplayed()
+        compose.onNodeWithText("歌手1").dragHorizontally(100f)
+        compose.onNodeWithText("歌曲3").assertIsDisplayed()
+        compose.onNodeWithText("歌曲3").dragHorizontally(-100f)
+        compose.onNodeWithText("歌曲1").assertIsDisplayed()
+        panel().assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(2, nexts); assertEquals(3, previous)
+            assertEquals(0, opens); assertEquals(0, toggles); assertEquals(0, seekFinishes)
+        }
+    }
+
+    @Test fun shortHorizontalSwipesAndDownwardSwipesDoNothing() {
+        showPlayer(initialIndex = 1)
+        compose.onNodeWithText("歌曲2").dragHorizontally(-20f)
+        compose.onNodeWithText("歌手2").dragHorizontally(20f)
+        compose.onNodeWithText("歌曲2").dragUp(-100f)
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        panel().assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, nexts); assertEquals(0, previous); assertEquals(0, opens) }
+    }
+
+    @Test fun horizontalGestureKeepsItsAxisWhenItDriftsUpward() {
+        showPlayer()
+        playerText().performTouchInput {
+            val scale = compose.density.density
+            down(center)
+            moveBy(Offset(-30f, -4f) * scale)
+            moveBy(Offset(0f, -100f) * scale)
+            moveBy(Offset(-80f, 0f) * scale)
+            up()
+        }
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        panel().assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, nexts); assertEquals(0, previous); assertEquals(0, opens) }
+    }
+
+    @Test fun verticalGestureKeepsItsAxisWhenItDriftsSideways() {
+        showPlayer()
+        playerText().performTouchInput {
+            val scale = compose.density.density
+            down(center)
+            moveBy(Offset(0f, -30f) * scale)
+            moveBy(Offset(-100f, 0f) * scale)
+            moveBy(Offset(0f, -60f) * scale)
+            up()
+        }
+        panel().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, nexts); assertEquals(0, previous); assertEquals(1, opens) }
+    }
+
+    @Test fun longGestureOnlyNavigatesOnceAcrossTrackRecompositionAndReversal() {
+        showPlayer()
+        playerText().performTouchInput {
+            down(center)
+            moveBy(Offset(-70f * compose.density.density, 0f))
+        }
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        playerText().performTouchInput {
+            val scale = compose.density.density
+            moveBy(Offset(-80f * scale, 0f))
+            moveBy(Offset(180f * scale, 0f))
+            moveBy(Offset(-100f * scale, 0f))
+            up()
+        }
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, nexts); assertEquals(0, previous); assertEquals(0, opens) }
+        playerText().dragHorizontally(100f)
+        compose.onNodeWithText("歌曲1").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, nexts); assertEquals(1, previous) }
+    }
+
+    @Test fun manualSwipesNavigateAndReturnInEveryPlaybackMode() {
+        showPlayer(initialIndex = 1)
+        listOf("循环播放", "随机播放", "单曲循环").forEachIndexed { index, label ->
+            playerText().dragUp()
+            if (index > 0) modeButton().performClick()
+            assertMode(label)
+            panel().performSemanticsAction(SemanticsActions.Dismiss) { it() }
+            playerText().dragHorizontally(-100f)
+            compose.onNodeWithText("歌曲2").assertDoesNotExist()
+            playerText().dragHorizontally(100f)
+            compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        }
+        compose.runOnIdle { assertEquals(3, nexts); assertEquals(3, previous) }
+    }
+
+    @Test fun accessibilityActionsNavigateInBothDirections() {
+        showPlayer(initialIndex = 1)
+        val next = playerText().fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .first { it.label == "下一首" }
+        compose.runOnIdle { assertTrue(next.action()) }
+        compose.onNodeWithText("歌曲3").assertIsDisplayed()
+        val back = playerText().fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .first { it.label == "上一首" }
+        compose.runOnIdle { assertTrue(back.action()) }
+        compose.onNodeWithText("歌曲2").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, nexts); assertEquals(1, previous); assertEquals(0, opens) }
+    }
+
+    @Test fun modeButtonCyclesWithoutSelectingOrClosingAndSurvivesReopening() {
+        showPlayer(initiallyOpen = true, initialIndex = 1)
+        assertMode("循环播放")
+        val titleBounds = compose.onNodeWithText("当前播放列表（3）").fetchSemanticsNode().boundsInRoot
+        assertTrue(modeButton().fetchSemanticsNode().boundsInRoot.left >= titleBounds.right)
+        repeat(2) {
+            listOf("随机播放", "单曲循环", "循环播放").forEach { label ->
+                modeButton().performClick()
+                assertMode(label)
+                panel().assertIsDisplayed()
+                compose.onNode(isSelected() and hasAnyDescendant(hasText("歌曲2"))).assertExists()
+            }
+        }
+        modeButton().performClick()
+        assertMode("随机播放")
+        panel().performSemanticsAction(SemanticsActions.Dismiss) { it() }
+        panel().assertDoesNotExist()
+        compose.onNodeWithText("歌曲2").dragUp()
+        assertMode("随机播放")
+        compose.runOnIdle { assertEquals(0, toggles); assertEquals(0, seekFinishes) }
+    }
 
     @Test fun titleSwipeOpensQueueAndSelectionKeepsItOpen() {
         showPlayer()
@@ -124,7 +292,11 @@ class PlaybackQueueUiTest {
         showPlayer()
         compose.onNodeWithContentDescription("专辑封面，播放").dragUp()
         compose.onNodeWithContentDescription("播放").dragUp()
-        compose.runOnIdle { assertEquals(0, opens) }
+        compose.onNodeWithContentDescription("专辑封面，播放").dragHorizontally(-100f)
+        compose.onNodeWithContentDescription("专辑封面，播放").dragHorizontally(100f)
+        compose.onNodeWithContentDescription("播放").dragHorizontally(-100f)
+        compose.onNodeWithContentDescription("播放").dragHorizontally(100f)
+        compose.runOnIdle { assertEquals(0, opens); assertEquals(0, nexts); assertEquals(0, previous) }
         compose.onNodeWithContentDescription("播放").performClick()
         compose.runOnIdle { assertEquals(1, toggles) }
     }
@@ -136,7 +308,7 @@ class PlaybackQueueUiTest {
         val pageBefore = compose.onNodeWithTag("page").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText("歌曲1").dragUp()
         val bounds = panel().fetchSemanticsNode().boundsInRoot
-        assertEquals(playerBefore.top, bounds.bottom, 1f)
+        assertEquals(playerBefore.top - panelBottomSpacingPx, bounds.bottom, 1f)
         assertTrue(bounds.top < playerBefore.top)
         assertEquals(playerBefore, compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot)
         assertEquals(navigationBefore, compose.onNodeWithTag("navigation").fetchSemanticsNode().boundsInRoot)
@@ -187,6 +359,9 @@ class PlaybackQueueUiTest {
         val longQueue = (1..50).map { Track(it, "长队列歌曲$it", listOf("歌手"), "$it.mp3", "", "", "", 0L) }
         showPlayer(longQueue, initialIndex = 35, initiallyOpen = true, darkTheme = true, fontScale = 1.5f)
         compose.onNodeWithText("当前播放列表（50）").assertIsDisplayed()
+        assertMode("循环播放")
+        modeButton().performClick()
+        assertMode("随机播放")
         compose.onNode(hasText("长队列歌曲36") and hasClickAction()).assertIsDisplayed()
         compose.onNode(isSelected() and hasAnyDescendant(hasText("长队列歌曲36"))).assertExists()
         val panelBounds = panel().fetchSemanticsNode().boundsInRoot
@@ -205,6 +380,6 @@ class PlaybackQueueUiTest {
         seek.performTouchInput { swipe(Offset(width * 0.2f, centerY), Offset(width * 0.8f, centerY), 400) }
         compose.runOnIdle { assertTrue(seekValue > 70000f); assertEquals(2, seekFinishes) }
         seek.dragUp()
-        compose.runOnIdle { assertEquals(0, opens) }
+        compose.runOnIdle { assertEquals(0, opens); assertEquals(0, nexts); assertEquals(0, previous) }
     }
 }

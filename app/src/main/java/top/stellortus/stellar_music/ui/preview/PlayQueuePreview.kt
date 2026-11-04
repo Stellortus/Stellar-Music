@@ -10,7 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import top.stellortus.smooth_kotlin.selectors.CyclicSelector
 import top.stellortus.stellar_music.ui.components.PlayerBarContent
+import top.stellortus.stellar_music.ui.player.PlaybackMode
 import top.stellortus.stellar_music.ui.player.PlaybackQueueHost
 import top.stellortus.stellar_music.ui.theme.StellarMusicTheme
 import top.stellortus.stellar_music.ui.widgets.StellarScaffold
@@ -23,6 +25,8 @@ fun PlayQueuePreview() {
         Track(1, "星河漫游", listOf("Stellar"), "music.mp3", "Listener", "", "", 0L)
     }
     var expanded by remember { mutableStateOf(true) }
+    val modes = remember { CyclicSelector(PlaybackMode.entries) }
+    var playbackMode by remember { mutableStateOf(PlaybackMode.Cyclic) }
 
     StellarMusicTheme {
         PlaybackQueueHost(
@@ -31,6 +35,12 @@ fun PlayQueuePreview() {
             currentIndex = 0,
             onSelect = {},
             onDismiss = { expanded = false },
+            playbackMode = playbackMode,
+            onCyclePlaybackMode = {
+                modes.stepForward()
+                val selected by modes
+                playbackMode = selected
+            },
         ) { playerAnchorModifier ->
             StellarScaffold(
                 bottomBar = {
