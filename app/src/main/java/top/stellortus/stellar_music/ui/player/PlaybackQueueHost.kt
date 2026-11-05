@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import top.stellortus.stellar_music.ui.theme.StellarTheme
 import top.stellortus.stellar_music_common.dto.Track
 
-/** Keeps the queue in the screen's layout, anchored to the actual player surface. */
+/** Keeps the queue above the player's layout, including its outer spacing. */
 @Composable
 internal fun PlaybackQueueHost(
     expanded: Boolean,

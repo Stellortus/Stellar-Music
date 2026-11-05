@@ -98,12 +98,14 @@ class PlaybackQueueUiTest {
                         StellarScaffold(
                             bottomBar = {
                                 Column {
-                                    PlayerBarContent(queue[selected], false, 1000f, 100000f,
-                                        { toggles++ }, { seekValue = it }, { seekFinishes++ },
-                                        onOpenQueue = { opens++; visible = true },
-                                        onNextTrack = { nexts++; controller.next() },
-                                        onPreviousTrack = { previous++; controller.previous() },
-                                        cardAnchorModifier = anchor.testTag("playerSurface"))
+                                    Box(Modifier.testTag("playerLayout")) {
+                                        PlayerBarContent(queue[selected], false, 1000f, 100000f,
+                                            { toggles++ }, { seekValue = it }, { seekFinishes++ },
+                                            onOpenQueue = { opens++; visible = true },
+                                            onNextTrack = { nexts++; controller.next() },
+                                            onPreviousTrack = { previous++; controller.previous() },
+                                            cardAnchorModifier = anchor.testTag("playerAnchor"))
+                                    }
                                     Box(Modifier.testTag("navigation")) {
                                         StellarNavigationBar(tab) { visible = false; tab = it }
                                     }
@@ -129,6 +131,15 @@ class PlaybackQueueUiTest {
     private fun playerText() = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions))
 
     private fun panel() = compose.onNodeWithContentDescription("当前播放列表面板")
+
+    private fun assertOverlayStopsAbovePlayer() {
+        val player = compose.onNodeWithTag("playerLayout").fetchSemanticsNode().boundsInRoot
+        val anchor = compose.onNodeWithTag("playerAnchor").fetchSemanticsNode().boundsInRoot
+        val scrim = compose.onNodeWithContentDescription("收起当前播放列表").fetchSemanticsNode().boundsInRoot
+        assertEquals(player.top, anchor.top, 1f)
+        assertEquals(player.top, scrim.bottom, 1f)
+        assertTrue(panel().fetchSemanticsNode().boundsInRoot.bottom <= player.top + 1f)
+    }
 
     private fun modeButton() = compose.onNodeWithContentDescription("切换播放模式")
 
@@ -303,14 +314,17 @@ class PlaybackQueueUiTest {
 
     @Test fun panelIsAnchoredWithoutMovingPlayerNavigationOrPage() {
         showPlayer()
-        val playerBefore = compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot
+        val playerBefore = compose.onNodeWithTag("playerLayout").fetchSemanticsNode().boundsInRoot
+        val playButtonBefore = compose.onNodeWithContentDescription("播放").fetchSemanticsNode().boundsInRoot
         val navigationBefore = compose.onNodeWithTag("navigation").fetchSemanticsNode().boundsInRoot
         val pageBefore = compose.onNodeWithTag("page").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithText("歌曲1").dragUp()
         val bounds = panel().fetchSemanticsNode().boundsInRoot
+        assertOverlayStopsAbovePlayer()
         assertEquals(playerBefore.top - panelBottomSpacingPx, bounds.bottom, 1f)
         assertTrue(bounds.top < playerBefore.top)
-        assertEquals(playerBefore, compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot)
+        assertEquals(playerBefore, compose.onNodeWithTag("playerLayout").fetchSemanticsNode().boundsInRoot)
+        assertEquals(playButtonBefore, compose.onNodeWithContentDescription("播放").fetchSemanticsNode().boundsInRoot)
         assertEquals(navigationBefore, compose.onNodeWithTag("navigation").fetchSemanticsNode().boundsInRoot)
         assertEquals(pageBefore, compose.onNodeWithTag("page").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithContentDescription("播放").performClick()
@@ -318,6 +332,8 @@ class PlaybackQueueUiTest {
         panel().assertIsDisplayed()
         compose.onNodeWithText("歌单").performClick()
         panel().assertDoesNotExist()
+        assertEquals(playerBefore, compose.onNodeWithTag("playerLayout").fetchSemanticsNode().boundsInRoot)
+        assertEquals(playButtonBefore, compose.onNodeWithContentDescription("播放").fetchSemanticsNode().boundsInRoot)
     }
 
     @Test fun scrimBackAndHeaderSwipeCloseThePanel() {
@@ -337,20 +353,23 @@ class PlaybackQueueUiTest {
 
     @Test fun animationRevealsUpwardAndClipsAtThePlayerEdge() {
         showPlayer()
-        val playerTop = compose.onNodeWithTag("playerSurface").fetchSemanticsNode().boundsInRoot.top
+        val playerTop = compose.onNodeWithTag("playerLayout").fetchSemanticsNode().boundsInRoot.top
         val action = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions))
             .fetchSemanticsNode().config[SemanticsActions.CustomActions].first()
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { action.action() }
         compose.mainClock.advanceTimeBy(80)
         val enteringTop = panel().fetchSemanticsNode().boundsInRoot.top
+        assertOverlayStopsAbovePlayer()
         assertTrue(panel().fetchSemanticsNode().boundsInRoot.bottom <= playerTop + 1f)
         compose.mainClock.advanceTimeBy(300)
+        assertOverlayStopsAbovePlayer()
         val expandedTop = panel().fetchSemanticsNode().boundsInRoot.top
         assertTrue(enteringTop > expandedTop)
         panel().performSemanticsAction(SemanticsActions.Dismiss) { it() }
         compose.mainClock.advanceTimeBy(80)
         assertTrue(panel().fetchSemanticsNode().boundsInRoot.top > expandedTop)
+        assertOverlayStopsAbovePlayer()
         compose.mainClock.autoAdvance = true
         panel().assertDoesNotExist()
     }
@@ -359,6 +378,7 @@ class PlaybackQueueUiTest {
         val longQueue = (1..50).map { Track(it, "长队列歌曲$it", listOf("歌手"), "$it.mp3", "", "", "", 0L) }
         showPlayer(longQueue, initialIndex = 35, initiallyOpen = true, darkTheme = true, fontScale = 1.5f)
         compose.onNodeWithText("当前播放列表（50）").assertIsDisplayed()
+        assertOverlayStopsAbovePlayer()
         assertMode("循环播放")
         modeButton().performClick()
         assertMode("随机播放")

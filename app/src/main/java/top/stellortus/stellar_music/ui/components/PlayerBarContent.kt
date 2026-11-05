@@ -89,11 +89,12 @@ internal fun PlayerBarContent(
     StellarCard(
         modifier = modifier
             .fillMaxWidth()
+            // Keep the player's outer spacing outside the queue overlay.
+            .then(cardAnchorModifier)
             .padding(
                 horizontal = StellarTheme.spacing.section,
                 vertical = StellarTheme.spacing.gap
-            )
-            .then(cardAnchorModifier),
+            ),
         kind = StellarSurfaceKind.Player
     ) {
         Column(
